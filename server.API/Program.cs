@@ -1,7 +1,8 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
-
+using server.API.Filters;
+using server.Application;
 using server.Infrastructure;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -13,12 +14,15 @@ builder.Services.AddControllers();
 builder.Services.AddOpenApi();
 builder.Services.AddSwaggerGen();
 
+builder.Services.AddRouting(options => options.LowercaseUrls = true);
+builder.Services.AddMvc(options => options.Filters.Add(typeof(ExceptionFilter)));
+builder.Services.AddApplication();
 builder.Services.AddInfrastructure(builder.Configuration);
 
 var app = builder.Build();
 
 
-if (args[0] == "seed-database")
+if (args.Length > 0 && args[0] == "seed-database")
 {
     await app.Services.SeedDatabase();
     return;
