@@ -1,4 +1,3 @@
-using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 
 namespace server.API.Controllers
@@ -10,7 +9,7 @@ namespace server.API.Controllers
         [HttpGet]
         public ActionResult<string> Get()
         {
-            return "Healthy";
+            return "OK";
         }
     }
 }
