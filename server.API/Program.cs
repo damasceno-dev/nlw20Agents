@@ -17,6 +17,13 @@ builder.Services.AddInfrastructure(builder.Configuration);
 
 var app = builder.Build();
 
+
+if (args[0] == "seed-database")
+{
+    await app.Services.SeedDatabase();
+    return;
+}
+
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
 {

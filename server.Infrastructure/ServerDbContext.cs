@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using server.Domain.Entities;
 
 namespace server.Infrastructure;
 
@@ -8,4 +9,6 @@ public class ServerDbContext : DbContext
     {
         
     }
+    
+    public DbSet<Room> Rooms { get; set; }
 }

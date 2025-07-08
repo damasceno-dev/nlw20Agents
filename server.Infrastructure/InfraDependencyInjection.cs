@@ -1,6 +1,8 @@
+using Bogus;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using server.Domain.Entities;
 
 namespace server.Infrastructure;
 
@@ -19,5 +21,33 @@ public static class InfraDependencyInjection
             throw new ArgumentException("Invalid connection string");
 
         services.AddDbContext<ServerDbContext>(options => options.UseNpgsql(connectionString));
+    }
+
+    public static async Task SeedDatabase(this IServiceProvider serviceProvider)
+    {
+        using var scope = serviceProvider.CreateScope();
+        var scopedServices = scope.ServiceProvider;
+
+        try
+        {
+            Console.WriteLine("Seeding...");
+            var dbContext = scopedServices.GetRequiredService<ServerDbContext>();
+            
+            var roomFaker = new Faker<Room>()
+                .RuleFor(r => r.Name, f => f.Company.CompanyName() + " Room")
+                .RuleFor(r => r.Description, f => f.Lorem.Sentence(10));
+        
+            var rooms = roomFaker.Generate(20);
+        
+            dbContext.Rooms.AddRange(rooms);
+            await dbContext.SaveChangesAsync();
+            Console.WriteLine("Seeded successfully");
+
+        }
+        catch (Exception e)
+        {
+            Console.WriteLine($@"An error occurred during database migration: {e.Message}");
+            throw;
+        }
     }
 }
