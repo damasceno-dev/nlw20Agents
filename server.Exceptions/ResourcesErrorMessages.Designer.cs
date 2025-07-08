@@ -50,5 +50,11 @@ namespace server.Exceptions {
                 return ResourceManager.GetString("UNKNOWN_ERROR", resourceCulture);
             }
         }
+        
+        public static string ROOM_NAME_EMPTY_OR_TOO_SHORT {
+            get {
+                return ResourceManager.GetString("ROOM_NAME_EMPTY_OR_TOO_SHORT", resourceCulture);
+            }
+        }
     }
 }

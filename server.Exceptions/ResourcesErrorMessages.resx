@@ -21,4 +21,7 @@
     <data name="UNKNOWN_ERROR" xml:space="preserve">
         <value>Erro desconhecido</value>
     </data>
+    <data name="ROOM_NAME_EMPTY_OR_TOO_SHORT" xml:space="preserve">
+        <value>O nome da sala é muito curto ou vazio</value>
+    </data>
 </root>

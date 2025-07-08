@@ -19,6 +19,7 @@ public static class InfraDependencyInjection
     private static void AddRepositories(IServiceCollection services)
     {
         services.AddScoped<IRoomsRepository, RoomsRepository>();
+        services.AddScoped<IUnitOfWork, UnitOfWork>();
     }
 
     private static void AddDbContext(IServiceCollection services, IConfiguration configuration)

@@ -9,9 +9,11 @@
     <ItemGroup>
       <ProjectReference Include="..\server.Communication\server.Communication.csproj" />
       <ProjectReference Include="..\server.Domain\server.Domain.csproj" />
+      <ProjectReference Include="..\server.Exceptions\server.Exceptions.csproj" />
     </ItemGroup>
 
     <ItemGroup>
+      <PackageReference Include="FluentValidation" Version="12.0.0" />
       <PackageReference Include="Microsoft.Extensions.Configuration.Abstractions" Version="9.0.6" />
       <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="9.0.6" />
     </ItemGroup>

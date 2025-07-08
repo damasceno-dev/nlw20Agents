@@ -1,8 +1,9 @@
 namespace server.Exceptions;
 
-public abstract class ServerException(string errorMessage)
-    : SystemException(errorMessage)
+public abstract class ServerException
+    : SystemException
 {
-    public abstract int StatusCode { get; }
+    protected ServerException(string message) : base (message) { }
+    public abstract int GetStatusCode { get; }
     public abstract List<string> GetErrors { get; }
 }

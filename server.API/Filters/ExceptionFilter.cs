@@ -17,7 +17,7 @@ public class ExceptionFilter : IExceptionFilter
         var errorMessage = environment?.EnvironmentName == "Development"? GetErrorDetail(context.Exception, context.HttpContext): ResourcesErrorMessages.UNKNOWN_ERROR;
             
         context.Result = context.Exception is ServerException serverException ? 
-            new ObjectResult(new ResponseErrorJson(serverException.GetErrors)) { StatusCode = serverException.StatusCode} :
+            new ObjectResult(new ResponseErrorJson(serverException.GetErrors)) { StatusCode = serverException.GetStatusCode} :
             new ObjectResult(new ResponseErrorJson(errorMessage)
             {
                 Method = $"{context.HttpContext.Request.Method} {context.HttpContext.Request.Path}"

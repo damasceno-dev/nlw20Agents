@@ -10,4 +10,9 @@ public class RoomsRepository(ServerDbContext dbContext) : IRoomsRepository
     {
         return await dbContext.Rooms.OrderBy(r => r.CreatedOn).AsNoTracking().ToListAsync();
     }
+
+    public async Task Create(Room room)
+    {
+        await dbContext.Rooms.AddAsync(room);
+    }
 }
