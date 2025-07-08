@@ -41,6 +41,12 @@ public static class InfraDependencyInjection
             Console.WriteLine("Seeding...");
             var dbContext = scopedServices.GetRequiredService<ServerDbContext>();
             
+            if (await dbContext.Rooms.AnyAsync())
+            {
+                Console.WriteLine("Database already seeded");
+                return;
+            }
+            
             var roomFaker = new Faker<Room>()
                 .RuleFor(r => r.Name, f => f.Company.CompanyName() + " Room")
                 .RuleFor(r => r.Description, f => f.Lorem.Sentence(10));
@@ -49,7 +55,36 @@ public static class InfraDependencyInjection
         
             dbContext.Rooms.AddRange(rooms);
             await dbContext.SaveChangesAsync();
-            Console.WriteLine("Seeded successfully");
+            // Create questions for each room - some with answers, some without
+            var questionFaker = new Faker<Questions>()
+                .RuleFor(q => q.Question, f => f.Lorem.Sentence() + "?")
+                .RuleFor(q => q.Answer, f => f.Random.Bool(0.6f) ? f.Lorem.Sentence(5) : string.Empty); // 60% chance to have an answer
+        
+            var allQuestions = new List<Questions>();
+        
+            foreach (var room in rooms)
+            {
+                var questionsForRoom = questionFaker.Generate(5);
+            
+                foreach (var question in questionsForRoom)
+                {
+                    question.RoomId = room.Id;
+                    question.Room = room;
+                }
+            
+                allQuestions.AddRange(questionsForRoom);
+            }
+        
+            dbContext.Questions.AddRange(allQuestions);
+            await dbContext.SaveChangesAsync();
+        
+            var answeredCount = allQuestions.Count(q => !string.IsNullOrEmpty(q.Answer));
+            var unansweredCount = allQuestions.Count - answeredCount;
+        
+            Console.WriteLine($"Seeded successfully: {rooms.Count} rooms with {allQuestions.Count} total questions");
+            Console.WriteLine($"  - {answeredCount} questions with answers");
+            Console.WriteLine($"  - {unansweredCount} questions without answers");
+
 
         }
         catch (Exception e)

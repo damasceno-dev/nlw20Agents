@@ -3,12 +3,9 @@ using server.Domain.Entities;
 
 namespace server.Infrastructure;
 
-public class ServerDbContext : DbContext
+public class ServerDbContext(DbContextOptions options)
+    : DbContext(options)
 {
-    public ServerDbContext(DbContextOptions options) : base(options)
-    {
-        
-    }
-    
     public DbSet<Room> Rooms { get; set; }
+    public DbSet<Questions> Questions { get; set; }
 }
