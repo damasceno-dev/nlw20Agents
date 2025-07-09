@@ -31,6 +31,8 @@ export interface ResponseRoomJson {
   id?: string;
   /** @nullable */
   name?: string | null;
+  /** @nullable */
+  description?: string | null;
   questionsCount?: number;
   createdOn?: string;
 }
