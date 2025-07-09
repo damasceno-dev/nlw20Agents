@@ -1,14 +1,15 @@
 "use client";
 
-import { useState } from "react";
+import { Loader2, Plus } from "lucide-react";
 import { useRouter } from "next/navigation";
+import type React from "react";
+import { useState } from "react";
 import { usePostRoomsCreate } from "@/api/generated/serverAPI";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Loader2, Plus } from "lucide-react";
 
 export function CreateRoomForm() {
   const router = useRouter();
@@ -21,8 +22,7 @@ export function CreateRoomForm() {
         // Redirect to the newly created room
         router.push(`/room/${data.id}`);
       },
-      onError: (error) => {
-        console.error("Failed to create room:", error);
+      onError: (_error) => {
         // You could add toast notification here
       },
     },
@@ -32,7 +32,7 @@ export function CreateRoomForm() {
     e.preventDefault();
     
     if (!name.trim()) {
-      return; // Don't submit if name is empty
+      return;
     }
 
     createRoomMutation.mutate({
@@ -55,36 +55,36 @@ export function CreateRoomForm() {
         </CardDescription>
       </CardHeader>
       <CardContent>
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form className="space-y-4" onSubmit={handleSubmit}>
           <div className="space-y-2">
             <Label htmlFor="name">Nome da sala *</Label>
             <Input
-              id="name"
-              type="text"
-              placeholder="Digite o nome da sala"
-              value={name}
-              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setName(e.target.value)}
-              required
               disabled={createRoomMutation.isPending}
+              id="name"
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setName(e.target.value)}
+              placeholder="Digite o nome da sala"
+              required
+              type="text"
+              value={name}
             />
           </div>
 
           <div className="space-y-2">
             <Label htmlFor="description">Descrição (opcional)</Label>
             <Textarea
-              id="description"
-              placeholder="Descreva o propósito desta sala..."
-              value={description}
-              onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setDescription(e.target.value)}
               disabled={createRoomMutation.isPending}
+              id="description"
+              onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setDescription(e.target.value)}
+              placeholder="Descreva o propósito desta sala..."
               rows={3}
+              value={description}
             />
           </div>
 
           <Button
-            type="submit"
             className="w-full"
             disabled={createRoomMutation.isPending || !name.trim()}
+            type="submit"
           >
             {createRoomMutation.isPending ? (
               <>
