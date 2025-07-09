@@ -64,7 +64,7 @@ A modern, full-stack web application built with Next.js 15, featuring AI-powered
    ```bash
    cp .env.example .env.local
    ```
-   
+
    Add your API URL:
    ```env
    NEXT_PUBLIC_API_URL=http://localhost:5130
@@ -153,7 +153,7 @@ The app can be deployed to any platform that supports Next.js:
 
 ## 📝 License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the MIT License.
 
 ## 🙏 Acknowledgments
 
@@ -164,7 +164,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ---
 
-<div align="center">
+<div>
   <p>Made with ❤️ using Next.js and modern web technologies</p>
   <p>⭐ Star this repo if you found it helpful!</p>
 </div>

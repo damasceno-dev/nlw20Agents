@@ -4,9 +4,34 @@
  * server.API
  * OpenAPI spec version: 1.0
  */
+export interface RequestCreateQuestionJson {
+  /** @nullable */
+  question: string | null;
+  /** @nullable */
+  answer?: string | null;
+}
+
+export interface RequestRoomCreateJson {
+  /** @nullable */
+  name?: string | null;
+  /** @nullable */
+  description?: string | null;
+}
+
+export interface ResponseQuestionJson {
+  id?: string;
+  /** @nullable */
+  question?: string | null;
+  /** @nullable */
+  answer?: string | null;
+  createdOn?: string;
+}
+
 export interface ResponseRoomJson {
   id?: string;
   /** @nullable */
   name?: string | null;
+  questionsCount?: number;
+  createdOn?: string;
 }
 

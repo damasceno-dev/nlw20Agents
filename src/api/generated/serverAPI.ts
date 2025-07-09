@@ -4,30 +4,38 @@
  * server.API
  * OpenAPI spec version: 1.0
  */
-
+import {
+  useInfiniteQuery,
+  useMutation,
+  useQuery
+} from '@tanstack/react-query';
 import type {
   DataTag,
   DefinedInitialDataOptions,
   DefinedUseInfiniteQueryResult,
   DefinedUseQueryResult,
   InfiniteData,
+  MutationFunction,
   QueryClient,
   QueryFunction,
   QueryKey,
   UndefinedInitialDataOptions,
   UseInfiniteQueryOptions,
   UseInfiniteQueryResult,
+  UseMutationOptions,
+  UseMutationResult,
   UseQueryOptions,
   UseQueryResult
 } from '@tanstack/react-query';
-import {
-  useInfiniteQuery,
-  useQuery
-} from '@tanstack/react-query';
-import { customInstance } from '../mutator/custom-instance';
+
 import type {
+  RequestCreateQuestionJson,
+  RequestRoomCreateJson,
+  ResponseQuestionJson,
   ResponseRoomJson
 } from './serverAPI.schemas';
+
+import { customInstance } from '../mutator/custom-instance';
 
 
 
@@ -39,14 +47,14 @@ export const getHealthcheck = (
       
       
       return customInstance<string>(
-      {url: '/healthcheck', method: 'GET', signal
+      {url: `/healthcheck`, method: 'GET', signal
     },
       );
     }
   
 
 export const getGetHealthcheckQueryKey = () => {
-    return ['/healthcheck'] as const;
+    return [`/healthcheck`] as const;
     }
 
     
@@ -177,77 +185,77 @@ export function useGetHealthcheck<TData = Awaited<ReturnType<typeof getHealthche
 
 
 
-export const getRoomsGetall = (
-    
+export const getQuestionsRoomIdList = (
+    roomId: string,
  signal?: AbortSignal
 ) => {
       
       
-      return customInstance<ResponseRoomJson[]>(
-      {url: '/rooms/getall', method: 'GET', signal
+      return customInstance<ResponseQuestionJson[]>(
+      {url: `/questions/${roomId}/list`, method: 'GET', signal
     },
       );
     }
   
 
-export const getGetRoomsGetallQueryKey = () => {
-    return ['/rooms/getall'] as const;
+export const getGetQuestionsRoomIdListQueryKey = (roomId: string,) => {
+    return [`/questions/${roomId}/list`] as const;
     }
 
     
-export const getGetRoomsGetallInfiniteQueryOptions = <TData = InfiniteData<Awaited<ReturnType<typeof getRoomsGetall>>>, TError = unknown>( options?: { query?:Partial<UseInfiniteQueryOptions<Awaited<ReturnType<typeof getRoomsGetall>>, TError, TData>>, }
+export const getGetQuestionsRoomIdListInfiniteQueryOptions = <TData = InfiniteData<Awaited<ReturnType<typeof getQuestionsRoomIdList>>>, TError = unknown>(roomId: string, options?: { query?:Partial<UseInfiniteQueryOptions<Awaited<ReturnType<typeof getQuestionsRoomIdList>>, TError, TData>>, }
 ) => {
 
 const {query: queryOptions} = options ?? {};
 
-  const queryKey =  queryOptions?.queryKey ?? getGetRoomsGetallQueryKey();
+  const queryKey =  queryOptions?.queryKey ?? getGetQuestionsRoomIdListQueryKey(roomId);
 
   
 
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof getRoomsGetall>>> = ({ signal }) => getRoomsGetall(signal);
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getQuestionsRoomIdList>>> = ({ signal }) => getQuestionsRoomIdList(roomId, signal);
 
       
 
       
 
-   return  { queryKey, queryFn, ...queryOptions} as UseInfiniteQueryOptions<Awaited<ReturnType<typeof getRoomsGetall>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+   return  { queryKey, queryFn, enabled: !!(roomId), ...queryOptions} as UseInfiniteQueryOptions<Awaited<ReturnType<typeof getQuestionsRoomIdList>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
 }
 
-export type GetRoomsGetallInfiniteQueryResult = NonNullable<Awaited<ReturnType<typeof getRoomsGetall>>>
-export type GetRoomsGetallInfiniteQueryError = unknown
+export type GetQuestionsRoomIdListInfiniteQueryResult = NonNullable<Awaited<ReturnType<typeof getQuestionsRoomIdList>>>
+export type GetQuestionsRoomIdListInfiniteQueryError = unknown
 
 
-export function useGetRoomsGetallInfinite<TData = InfiniteData<Awaited<ReturnType<typeof getRoomsGetall>>>, TError = unknown>(
-  options: { query:Partial<UseInfiniteQueryOptions<Awaited<ReturnType<typeof getRoomsGetall>>, TError, TData>> & Pick<
+export function useGetQuestionsRoomIdListInfinite<TData = InfiniteData<Awaited<ReturnType<typeof getQuestionsRoomIdList>>>, TError = unknown>(
+ roomId: string, options: { query:Partial<UseInfiniteQueryOptions<Awaited<ReturnType<typeof getQuestionsRoomIdList>>, TError, TData>> & Pick<
         DefinedInitialDataOptions<
-          Awaited<ReturnType<typeof getRoomsGetall>>,
+          Awaited<ReturnType<typeof getQuestionsRoomIdList>>,
           TError,
-          Awaited<ReturnType<typeof getRoomsGetall>>
+          Awaited<ReturnType<typeof getQuestionsRoomIdList>>
         > , 'initialData'
       >, }
  , queryClient?: QueryClient
   ):  DefinedUseInfiniteQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useGetRoomsGetallInfinite<TData = InfiniteData<Awaited<ReturnType<typeof getRoomsGetall>>>, TError = unknown>(
-  options?: { query?:Partial<UseInfiniteQueryOptions<Awaited<ReturnType<typeof getRoomsGetall>>, TError, TData>> & Pick<
+export function useGetQuestionsRoomIdListInfinite<TData = InfiniteData<Awaited<ReturnType<typeof getQuestionsRoomIdList>>>, TError = unknown>(
+ roomId: string, options?: { query?:Partial<UseInfiniteQueryOptions<Awaited<ReturnType<typeof getQuestionsRoomIdList>>, TError, TData>> & Pick<
         UndefinedInitialDataOptions<
-          Awaited<ReturnType<typeof getRoomsGetall>>,
+          Awaited<ReturnType<typeof getQuestionsRoomIdList>>,
           TError,
-          Awaited<ReturnType<typeof getRoomsGetall>>
+          Awaited<ReturnType<typeof getQuestionsRoomIdList>>
         > , 'initialData'
       >, }
  , queryClient?: QueryClient
   ):  UseInfiniteQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useGetRoomsGetallInfinite<TData = InfiniteData<Awaited<ReturnType<typeof getRoomsGetall>>>, TError = unknown>(
-  options?: { query?:Partial<UseInfiniteQueryOptions<Awaited<ReturnType<typeof getRoomsGetall>>, TError, TData>>, }
+export function useGetQuestionsRoomIdListInfinite<TData = InfiniteData<Awaited<ReturnType<typeof getQuestionsRoomIdList>>>, TError = unknown>(
+ roomId: string, options?: { query?:Partial<UseInfiniteQueryOptions<Awaited<ReturnType<typeof getQuestionsRoomIdList>>, TError, TData>>, }
  , queryClient?: QueryClient
   ):  UseInfiniteQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
 
-export function useGetRoomsGetallInfinite<TData = InfiniteData<Awaited<ReturnType<typeof getRoomsGetall>>>, TError = unknown>(
-  options?: { query?:Partial<UseInfiniteQueryOptions<Awaited<ReturnType<typeof getRoomsGetall>>, TError, TData>>, }
+export function useGetQuestionsRoomIdListInfinite<TData = InfiniteData<Awaited<ReturnType<typeof getQuestionsRoomIdList>>>, TError = unknown>(
+ roomId: string, options?: { query?:Partial<UseInfiniteQueryOptions<Awaited<ReturnType<typeof getQuestionsRoomIdList>>, TError, TData>>, }
  , queryClient?: QueryClient 
  ):  UseInfiniteQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
 
-  const queryOptions = getGetRoomsGetallInfiniteQueryOptions(options)
+  const queryOptions = getGetQuestionsRoomIdListInfiniteQueryOptions(roomId,options)
 
   const query = useInfiniteQuery(queryOptions , queryClient) as  UseInfiniteQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 
@@ -258,59 +266,59 @@ export function useGetRoomsGetallInfinite<TData = InfiniteData<Awaited<ReturnTyp
 
 
 
-export const getGetRoomsGetallQueryOptions = <TData = Awaited<ReturnType<typeof getRoomsGetall>>, TError = unknown>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getRoomsGetall>>, TError, TData>>, }
+export const getGetQuestionsRoomIdListQueryOptions = <TData = Awaited<ReturnType<typeof getQuestionsRoomIdList>>, TError = unknown>(roomId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getQuestionsRoomIdList>>, TError, TData>>, }
 ) => {
 
 const {query: queryOptions} = options ?? {};
 
-  const queryKey =  queryOptions?.queryKey ?? getGetRoomsGetallQueryKey();
+  const queryKey =  queryOptions?.queryKey ?? getGetQuestionsRoomIdListQueryKey(roomId);
 
   
 
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof getRoomsGetall>>> = ({ signal }) => getRoomsGetall(signal);
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getQuestionsRoomIdList>>> = ({ signal }) => getQuestionsRoomIdList(roomId, signal);
 
       
 
       
 
-   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getRoomsGetall>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+   return  { queryKey, queryFn, enabled: !!(roomId), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getQuestionsRoomIdList>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
 }
 
-export type GetRoomsGetallQueryResult = NonNullable<Awaited<ReturnType<typeof getRoomsGetall>>>
-export type GetRoomsGetallQueryError = unknown
+export type GetQuestionsRoomIdListQueryResult = NonNullable<Awaited<ReturnType<typeof getQuestionsRoomIdList>>>
+export type GetQuestionsRoomIdListQueryError = unknown
 
 
-export function useGetRoomsGetall<TData = Awaited<ReturnType<typeof getRoomsGetall>>, TError = unknown>(
-  options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getRoomsGetall>>, TError, TData>> & Pick<
+export function useGetQuestionsRoomIdList<TData = Awaited<ReturnType<typeof getQuestionsRoomIdList>>, TError = unknown>(
+ roomId: string, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getQuestionsRoomIdList>>, TError, TData>> & Pick<
         DefinedInitialDataOptions<
-          Awaited<ReturnType<typeof getRoomsGetall>>,
+          Awaited<ReturnType<typeof getQuestionsRoomIdList>>,
           TError,
-          Awaited<ReturnType<typeof getRoomsGetall>>
+          Awaited<ReturnType<typeof getQuestionsRoomIdList>>
         > , 'initialData'
       >, }
  , queryClient?: QueryClient
   ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useGetRoomsGetall<TData = Awaited<ReturnType<typeof getRoomsGetall>>, TError = unknown>(
-  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getRoomsGetall>>, TError, TData>> & Pick<
+export function useGetQuestionsRoomIdList<TData = Awaited<ReturnType<typeof getQuestionsRoomIdList>>, TError = unknown>(
+ roomId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getQuestionsRoomIdList>>, TError, TData>> & Pick<
         UndefinedInitialDataOptions<
-          Awaited<ReturnType<typeof getRoomsGetall>>,
+          Awaited<ReturnType<typeof getQuestionsRoomIdList>>,
           TError,
-          Awaited<ReturnType<typeof getRoomsGetall>>
+          Awaited<ReturnType<typeof getQuestionsRoomIdList>>
         > , 'initialData'
       >, }
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useGetRoomsGetall<TData = Awaited<ReturnType<typeof getRoomsGetall>>, TError = unknown>(
-  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getRoomsGetall>>, TError, TData>>, }
+export function useGetQuestionsRoomIdList<TData = Awaited<ReturnType<typeof getQuestionsRoomIdList>>, TError = unknown>(
+ roomId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getQuestionsRoomIdList>>, TError, TData>>, }
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
 
-export function useGetRoomsGetall<TData = Awaited<ReturnType<typeof getRoomsGetall>>, TError = unknown>(
-  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getRoomsGetall>>, TError, TData>>, }
+export function useGetQuestionsRoomIdList<TData = Awaited<ReturnType<typeof getQuestionsRoomIdList>>, TError = unknown>(
+ roomId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getQuestionsRoomIdList>>, TError, TData>>, }
  , queryClient?: QueryClient 
  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
 
-  const queryOptions = getGetRoomsGetallQueryOptions(options)
+  const queryOptions = getGetQuestionsRoomIdListQueryOptions(roomId,options)
 
   const query = useQuery(queryOptions , queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 
@@ -322,3 +330,267 @@ export function useGetRoomsGetall<TData = Awaited<ReturnType<typeof getRoomsGeta
 
 
 
+export const postQuestionsRoomIdCreate = (
+    roomId: string,
+    requestCreateQuestionJson: RequestCreateQuestionJson,
+ signal?: AbortSignal
+) => {
+      
+      
+      return customInstance<ResponseQuestionJson[]>(
+      {url: `/questions/${roomId}/create`, method: 'POST',
+      headers: {'Content-Type': 'application/json', },
+      data: requestCreateQuestionJson, signal
+    },
+      );
+    }
+  
+
+
+export const getPostQuestionsRoomIdCreateMutationOptions = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postQuestionsRoomIdCreate>>, TError,{roomId: string;data: RequestCreateQuestionJson}, TContext>, }
+): UseMutationOptions<Awaited<ReturnType<typeof postQuestionsRoomIdCreate>>, TError,{roomId: string;data: RequestCreateQuestionJson}, TContext> => {
+
+const mutationKey = ['postQuestionsRoomIdCreate'];
+const {mutation: mutationOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }};
+
+      
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postQuestionsRoomIdCreate>>, {roomId: string;data: RequestCreateQuestionJson}> = (props) => {
+          const {roomId,data} = props ?? {};
+
+          return  postQuestionsRoomIdCreate(roomId,data,)
+        }
+
+        
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PostQuestionsRoomIdCreateMutationResult = NonNullable<Awaited<ReturnType<typeof postQuestionsRoomIdCreate>>>
+    export type PostQuestionsRoomIdCreateMutationBody = RequestCreateQuestionJson
+    export type PostQuestionsRoomIdCreateMutationError = unknown
+
+    export const usePostQuestionsRoomIdCreate = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postQuestionsRoomIdCreate>>, TError,{roomId: string;data: RequestCreateQuestionJson}, TContext>, }
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof postQuestionsRoomIdCreate>>,
+        TError,
+        {roomId: string;data: RequestCreateQuestionJson},
+        TContext
+      > => {
+
+      const mutationOptions = getPostQuestionsRoomIdCreateMutationOptions(options);
+
+      return useMutation(mutationOptions , queryClient);
+    }
+    
+export const getRoomsList = (
+    
+ signal?: AbortSignal
+) => {
+      
+      
+      return customInstance<ResponseRoomJson[]>(
+      {url: `/rooms/list`, method: 'GET', signal
+    },
+      );
+    }
+  
+
+export const getGetRoomsListQueryKey = () => {
+    return [`/rooms/list`] as const;
+    }
+
+    
+export const getGetRoomsListInfiniteQueryOptions = <TData = InfiniteData<Awaited<ReturnType<typeof getRoomsList>>>, TError = unknown>( options?: { query?:Partial<UseInfiniteQueryOptions<Awaited<ReturnType<typeof getRoomsList>>, TError, TData>>, }
+) => {
+
+const {query: queryOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetRoomsListQueryKey();
+
+  
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getRoomsList>>> = ({ signal }) => getRoomsList(signal);
+
+      
+
+      
+
+   return  { queryKey, queryFn, ...queryOptions} as UseInfiniteQueryOptions<Awaited<ReturnType<typeof getRoomsList>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetRoomsListInfiniteQueryResult = NonNullable<Awaited<ReturnType<typeof getRoomsList>>>
+export type GetRoomsListInfiniteQueryError = unknown
+
+
+export function useGetRoomsListInfinite<TData = InfiniteData<Awaited<ReturnType<typeof getRoomsList>>>, TError = unknown>(
+  options: { query:Partial<UseInfiniteQueryOptions<Awaited<ReturnType<typeof getRoomsList>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getRoomsList>>,
+          TError,
+          Awaited<ReturnType<typeof getRoomsList>>
+        > , 'initialData'
+      >, }
+ , queryClient?: QueryClient
+  ):  DefinedUseInfiniteQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetRoomsListInfinite<TData = InfiniteData<Awaited<ReturnType<typeof getRoomsList>>>, TError = unknown>(
+  options?: { query?:Partial<UseInfiniteQueryOptions<Awaited<ReturnType<typeof getRoomsList>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getRoomsList>>,
+          TError,
+          Awaited<ReturnType<typeof getRoomsList>>
+        > , 'initialData'
+      >, }
+ , queryClient?: QueryClient
+  ):  UseInfiniteQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetRoomsListInfinite<TData = InfiniteData<Awaited<ReturnType<typeof getRoomsList>>>, TError = unknown>(
+  options?: { query?:Partial<UseInfiniteQueryOptions<Awaited<ReturnType<typeof getRoomsList>>, TError, TData>>, }
+ , queryClient?: QueryClient
+  ):  UseInfiniteQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+
+export function useGetRoomsListInfinite<TData = InfiniteData<Awaited<ReturnType<typeof getRoomsList>>>, TError = unknown>(
+  options?: { query?:Partial<UseInfiniteQueryOptions<Awaited<ReturnType<typeof getRoomsList>>, TError, TData>>, }
+ , queryClient?: QueryClient 
+ ):  UseInfiniteQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getGetRoomsListInfiniteQueryOptions(options)
+
+  const query = useInfiniteQuery(queryOptions , queryClient) as  UseInfiniteQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  query.queryKey = queryOptions.queryKey ;
+
+  return query;
+}
+
+
+
+export const getGetRoomsListQueryOptions = <TData = Awaited<ReturnType<typeof getRoomsList>>, TError = unknown>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getRoomsList>>, TError, TData>>, }
+) => {
+
+const {query: queryOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetRoomsListQueryKey();
+
+  
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getRoomsList>>> = ({ signal }) => getRoomsList(signal);
+
+      
+
+      
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getRoomsList>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetRoomsListQueryResult = NonNullable<Awaited<ReturnType<typeof getRoomsList>>>
+export type GetRoomsListQueryError = unknown
+
+
+export function useGetRoomsList<TData = Awaited<ReturnType<typeof getRoomsList>>, TError = unknown>(
+  options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getRoomsList>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getRoomsList>>,
+          TError,
+          Awaited<ReturnType<typeof getRoomsList>>
+        > , 'initialData'
+      >, }
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetRoomsList<TData = Awaited<ReturnType<typeof getRoomsList>>, TError = unknown>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getRoomsList>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getRoomsList>>,
+          TError,
+          Awaited<ReturnType<typeof getRoomsList>>
+        > , 'initialData'
+      >, }
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetRoomsList<TData = Awaited<ReturnType<typeof getRoomsList>>, TError = unknown>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getRoomsList>>, TError, TData>>, }
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+
+export function useGetRoomsList<TData = Awaited<ReturnType<typeof getRoomsList>>, TError = unknown>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getRoomsList>>, TError, TData>>, }
+ , queryClient?: QueryClient 
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getGetRoomsListQueryOptions(options)
+
+  const query = useQuery(queryOptions , queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  query.queryKey = queryOptions.queryKey ;
+
+  return query;
+}
+
+
+
+
+export const postRoomsCreate = (
+    requestRoomCreateJson: RequestRoomCreateJson,
+ signal?: AbortSignal
+) => {
+      
+      
+      return customInstance<ResponseRoomJson>(
+      {url: `/rooms/create`, method: 'POST',
+      headers: {'Content-Type': 'application/json', },
+      data: requestRoomCreateJson, signal
+    },
+      );
+    }
+  
+
+
+export const getPostRoomsCreateMutationOptions = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postRoomsCreate>>, TError,{data: RequestRoomCreateJson}, TContext>, }
+): UseMutationOptions<Awaited<ReturnType<typeof postRoomsCreate>>, TError,{data: RequestRoomCreateJson}, TContext> => {
+
+const mutationKey = ['postRoomsCreate'];
+const {mutation: mutationOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }};
+
+      
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postRoomsCreate>>, {data: RequestRoomCreateJson}> = (props) => {
+          const {data} = props ?? {};
+
+          return  postRoomsCreate(data,)
+        }
+
+        
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PostRoomsCreateMutationResult = NonNullable<Awaited<ReturnType<typeof postRoomsCreate>>>
+    export type PostRoomsCreateMutationBody = RequestRoomCreateJson
+    export type PostRoomsCreateMutationError = unknown
+
+    export const usePostRoomsCreate = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postRoomsCreate>>, TError,{data: RequestRoomCreateJson}, TContext>, }
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof postRoomsCreate>>,
+        TError,
+        {data: RequestRoomCreateJson},
+        TContext
+      > => {
+
+      const mutationOptions = getPostRoomsCreateMutationOptions(options);
+
+      return useMutation(mutationOptions , queryClient);
+    }
+    

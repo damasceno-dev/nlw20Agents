@@ -1,30 +1,63 @@
 import Link from "next/link";
-import { getRoomsGetall } from "@/api/generated/serverAPI";
+import { getRoomsList } from "@/api/generated/serverAPI";
+import {Card, CardContent, CardDescription, CardHeader, CardTitle} from "@/components/ui/card";
+import {ArrowRight} from "lucide-react";
+import {Badge} from "@/components/ui/badge";
+import {formatDate} from "@/utils/format-date";
+
 
 export default async function CreateRoomPage() {
-    const rooms = await getRoomsGetall();
+    const rooms = await getRoomsList();
 
     return (
-        <div className="p-6">
-            <h1 className="mb-6 font-bold text-2xl">Rooms</h1>
-            
-            <div className="grid gap-4">
-                {rooms?.map((room) => (
-                    <div className="rounded-lg border p-4 transition-all hover:bg-gray-800" key={room.id} > 
-                        <h2 className="font-semibold text-lg">{room.name || 'Unnamed Room'}</h2>
-                        <Link 
-                            className="mt-2 inline-block rounded bg-blue-500 px-4 py-2 transition-all hover:bg-blue-600"
-                            href={`/room/${room.id}`}
-                        >
-                            Access Room
-                        </Link>
-                    </div>
-                ))}
-            </div>
+        <div className="min-h-screen p-4">
+            <div className="mx-auto max-w-4xl">
 
-            {rooms?.length === 0 && (
-                <p className="text-gray-500">No rooms found.</p>
-            )}
+
+
+                <div className="grid grid-cols-2 items-start gap-8">
+
+                    <h1 className="mb-6 font-bold text-2xl">Create room form</h1>
+                    <Card>
+                        <CardHeader>
+                            <CardTitle>
+                                Salas recentes
+                            </CardTitle>
+                            <CardDescription>
+                                Acesso rápido para as salas criadas recentemente
+                            </CardDescription>
+                        </CardHeader>
+                        <CardContent className="flex flex-col gap-3">
+                            {rooms?.map((room) => (
+                                <div className="flex items-center justify-between rounded-lg border p-3 transition-all hover:bg-gray-800" key={room.id} >
+                                    <div className="flex flex-1 flex-col gap-1">
+                                        <h3 className="font-semibold text-lg">{room.name || 'Unnamed Room'}</h3>
+                                        <div className="flex items-center gap-2">
+                                            <Badge>{formatDate(room.createdOn)}</Badge>
+                                            <Badge className="text-xs" variant="secondary">
+                                                {room.questionsCount === 0
+                                                    ? 'nenhuma pergunta'
+                                                    : `${room.questionsCount} pergunta${room.questionsCount === 1 ? '' : 's'}`}
+                                            </Badge>
+                                        </div>
+                                    </div>
+                                    <Link
+                                        className="flex items-center gap-1 rounded bg-blue-500 p-3 text-sm transition-all hover:bg-blue-600"
+                                        href={`/room/${room.id}`}
+                                    >
+                                        Entrar
+                                        <ArrowRight className="size-3" />
+                                    </Link>
+                                </div>
+                            ))}
+                        </CardContent>
+                    </Card>
+                </div>
+
+                {rooms?.length === 0 && (
+                    <p className="text-gray-500">No rooms found.</p>
+                )}
+            </div>
         </div>
     );
 }
