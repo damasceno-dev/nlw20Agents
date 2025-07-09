@@ -14,7 +14,8 @@ public static class RoomGetAllMapper
         return new ResponseRoomJson
         {
             Id = room.Id,
-            Name = room.Name
+            Name = room.Name,
+            QuestionsCount = room.Questions.Count
         };
     }
 
