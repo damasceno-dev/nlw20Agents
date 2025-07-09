@@ -4,6 +4,7 @@ import {Card, CardContent, CardDescription, CardHeader, CardTitle} from "@/compo
 import {ArrowRight} from "lucide-react";
 import {Badge} from "@/components/ui/badge";
 import {formatDate} from "@/utils/format-date";
+import { CreateRoomForm } from "@/components/create-room-form";
 
 
 export default async function CreateRoomPage() {
@@ -17,7 +18,7 @@ export default async function CreateRoomPage() {
 
                 <div className="grid grid-cols-2 items-start gap-8">
 
-                    <h1 className="mb-6 font-bold text-2xl">Create room form</h1>
+                    <CreateRoomForm />
                     <Card>
                         <CardHeader>
                             <CardTitle>
