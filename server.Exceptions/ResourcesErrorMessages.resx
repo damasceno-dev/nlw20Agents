@@ -24,4 +24,10 @@
     <data name="ROOM_NAME_EMPTY_OR_TOO_SHORT" xml:space="preserve">
         <value>O nome da sala é muito curto ou vazio</value>
     </data>
+    <data name="QUESTION_CANT_BE_EMPTY" xml:space="preserve">
+        <value>A pergunta não pode ser nula ou vazia</value>
+    </data>
+    <data name="ROOM_DOESNT_EXISTS" xml:space="preserve">
+        <value>Esta sala não existe</value>
+    </data>
 </root>

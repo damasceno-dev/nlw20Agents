@@ -56,5 +56,17 @@ namespace server.Exceptions {
                 return ResourceManager.GetString("ROOM_NAME_EMPTY_OR_TOO_SHORT", resourceCulture);
             }
         }
+        
+        public static string QUESTION_CANT_BE_EMPTY {
+            get {
+                return ResourceManager.GetString("QUESTION_CANT_BE_EMPTY", resourceCulture);
+            }
+        }
+        
+        public static string ROOM_DOESNT_EXISTS {
+            get {
+                return ResourceManager.GetString("ROOM_DOESNT_EXISTS", resourceCulture);
+            }
+        }
     }
 }

@@ -1,5 +1,7 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using server.Application.UseCases.Question.Create;
+using server.Application.UseCases.Question.GetFromRoom;
 using server.Application.UseCases.Rooms.Create;
 using server.Application.UseCases.Rooms.GetAll;
 
@@ -11,5 +13,7 @@ public static class ApplicationDependencyInjection
     {
         services.AddScoped<RoomGetAllUseCase>();
         services.AddScoped<RoomCreateUseCase>();
+        services.AddScoped<QuestionsGetFromRoomUseCase>();
+        services.AddScoped<QuestionsCreateUseCase>();
     }
 }

@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Http;
@@ -14,7 +15,7 @@ namespace server.API.Controllers
     public class RoomsController : ControllerBase
     {
         [HttpGet]
-        [Route("getAll")]
+        [Route("list")]
         [ProducesResponseType(typeof(List<ResponseRoomJson>), StatusCodes.Status200OK)]
         public async Task<IActionResult> GetAll([FromServices] RoomGetAllUseCase roomGetAllUseCase)
         {
