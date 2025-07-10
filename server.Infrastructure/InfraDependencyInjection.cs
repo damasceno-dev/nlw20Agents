@@ -5,6 +5,7 @@ using Microsoft.Extensions.DependencyInjection;
 using server.Domain.Entities;
 using server.Domain.Interfaces;
 using server.Infrastructure.Repositories;
+using server.Infrastructure.Services;
 
 namespace server.Infrastructure;
 
@@ -14,6 +15,7 @@ public static class InfraDependencyInjection
     {
         AddDbContext(services, configuration);
         AddRepositories(services);
+        AddServices(services);
     }
 
     private static void AddRepositories(IServiceCollection services)
@@ -23,6 +25,11 @@ public static class InfraDependencyInjection
         services.AddScoped<IUnitOfWork, UnitOfWork>();
     }
 
+    private static void AddServices(IServiceCollection services)
+    {
+        services.AddScoped<IArtificialIntelligenceService, ArtificialIntelligenceService>();
+    }
+
     private static void AddDbContext(IServiceCollection services, IConfiguration configuration)
     {
         var connectionString = configuration.GetConnectionString("DefaultConnection");
@@ -30,7 +37,7 @@ public static class InfraDependencyInjection
         if (connectionString is null)
             throw new ArgumentException("Invalid connection string");
 
-        services.AddDbContext<ServerDbContext>(options => options.UseNpgsql(connectionString));
+        services.AddDbContext<ServerDbContext>(options => options.UseNpgsql(connectionString, o=> o.UseVector()));
     }
 
     public static async Task SeedDatabase(this IServiceProvider serviceProvider)

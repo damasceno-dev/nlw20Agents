@@ -30,4 +30,16 @@
     <data name="ROOM_DOESNT_EXISTS" xml:space="preserve">
         <value>Esta sala não existe</value>
     </data>
+    <data name="AUDIO_NOT_FOUND" xml:space="preserve">
+        <value>Arquivo de áudio não encontrado</value>
+    </data>
+    <data name="AUDIO_SIZE_EXCEEDED" xml:space="preserve">
+        <value>. Tamanho não deve exceder {0}MB.</value>
+    </data>
+    <data name="AUDIO_INVALID_FORMAT" xml:space="preserve">
+        <value>Formato inválido de áudio</value>
+    </data>
+    <data name="AUDIO_INVALID_TYPE" xml:space="preserve">
+        <value>Tipo inválido de áudio</value>
+    </data>
 </root>

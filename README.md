@@ -39,23 +39,53 @@ NLW Agents is a cutting-edge platform that revolutionizes online meetings by lev
    cd nlw-agents
    ```
 
-2. Start the database using Docker Compose
+2. Configure the application
    ```bash
+   cd server/server.API
+   cp appsettings.Example.json appsettings.Development.json
+   # Edit appsettings.Development.json with your actual configuration values
+   ```
+
+3. Start the database using Docker Compose
+   ```bash
+   cd ../.. # Return to root directory
    docker-compose up -d
    ```
 
-3. Seed the database (optional)
+4. Seed the database (optional)
    ```bash
    cd server
    dotnet run --project server.API seed-database
    ```
 
-4. Run the application
+5. Run the application
    ```bash
    dotnet run --project server.API
    ```
 
-5. Access the API at `http://localhost:5130` or via Swagger at `http://localhost:5130/swagger`
+6. Access the API at `http://localhost:5130` or via Swagger at `http://localhost:5130/swagger`
+
+## 🔐 Configuration
+
+The application uses the standard ASP.NET Core configuration system. Configuration files:
+
+- `appsettings.json`: Base configuration (tracked in git)
+- `appsettings.Development.json`: Development environment settings (gitignored)
+- `appsettings.Production.json`: Production environment settings (gitignored)
+- `appsettings.Example.json`: Template for creating environment-specific settings
+
+### Required Configuration
+
+```json
+{
+  "ConnectionStrings": {
+    "DefaultConnection": "Host=localhost;Database=agents;Username=docker;Password=docker"
+  },
+  "OpenAI": {
+    "ApiKey": "your-openai-api-key-here"
+  }
+}
+```
 
 ## 🏗️ Architecture
 

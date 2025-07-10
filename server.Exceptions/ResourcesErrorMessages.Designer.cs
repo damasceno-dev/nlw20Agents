@@ -68,5 +68,29 @@ namespace server.Exceptions {
                 return ResourceManager.GetString("ROOM_DOESNT_EXISTS", resourceCulture);
             }
         }
+        
+        public static string AUDIO_NOT_FOUND {
+            get {
+                return ResourceManager.GetString("AUDIO_NOT_FOUND", resourceCulture);
+            }
+        }
+        
+        public static string AUDIO_SIZE_EXCEEDED {
+            get {
+                return ResourceManager.GetString("AUDIO_SIZE_EXCEEDED", resourceCulture);
+            }
+        }
+        
+        public static string AUDIO_INVALID_FORMAT {
+            get {
+                return ResourceManager.GetString("AUDIO_INVALID_FORMAT", resourceCulture);
+            }
+        }
+        
+        public static string AUDIO_INVALID_TYPE {
+            get {
+                return ResourceManager.GetString("AUDIO_INVALID_TYPE", resourceCulture);
+            }
+        }
     }
 }

@@ -8,4 +8,5 @@ public class ServerDbContext(DbContextOptions options)
 {
     public DbSet<Room> Rooms { get; set; }
     public DbSet<Questions> Questions { get; set; }
+    public DbSet<AudioChunk> AudioChunks { get; set; }
 }
