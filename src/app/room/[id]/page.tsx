@@ -1,8 +1,11 @@
 import {getQuestionsRoomIdList, getRoomsRoomIdGetbyid} from "@/api/generated/serverAPI";
 import { CreateQuestionForm } from "@/components/create-question-form";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatDate } from "@/utils/format-date";
+import { ArrowLeft, Mic } from "lucide-react";
+import Link from "next/link";
 
 interface RoomPageProps {
   params: { id: string };
@@ -13,10 +16,22 @@ export default async function RoomPage({ params }: RoomPageProps) {
   const { id } = await params;
   const questions = await getQuestionsRoomIdList(id);
   const room = await getRoomsRoomIdGetbyid(id);
-  
+
   return (
-    <div className="min-h-screen p-4">
+    <div className="mt-10 min-h-screen p-4">
       <div className="mx-auto max-w-4xl">
+        <div className="mb-8 flex justify-between gap-4">
+          <Button asChild size="sm" variant="outline" >
+            <Link className="flex items-center gap-2" href="/create-room" >
+              <ArrowLeft className="h-4 w-4" />
+              Voltar ao início
+            </Link>
+          </Button>
+          <Button className="flex items-center gap-2" size="sm"  variant="outline" >
+            <Mic className="h-4 w-4" />
+            Gravar Áudio
+          </Button>
+        </div>
         <div className="mb-6">
           <h1 className="font-bold text-3xl">Sala {room.name || "Sala sem nome"}</h1>
           {room.description && room.description.trim().length > 0 && (
