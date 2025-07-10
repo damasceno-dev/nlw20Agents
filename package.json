@@ -9,6 +9,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
+    "biome:check": "biome check .",
+    "biome:lint": "biome lint .",
     "generate-api:dev-http": "cross-env SWAGGER_URL=http://localhost:5130/swagger/v1/swagger.json orval",
     "generate-api:dev-https": "cross-env SWAGGER_URL=https://localhost:7203/swagger/v1/swagger.json orval",
     "generate-api:prod": "cross-env SWAGGER_URL=https://www.yourdomain.com/swagger/v1/swagger.json orval"

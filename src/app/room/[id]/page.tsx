@@ -4,8 +4,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatDate } from "@/utils/format-date";
-import { ArrowLeft, Mic } from "lucide-react";
 import Link from "next/link";
+import { ArrowLeft, Mic } from "lucide-react";
 
 interface RoomPageProps {
   params: { id: string };
@@ -22,14 +22,16 @@ export default async function RoomPage({ params }: RoomPageProps) {
       <div className="mx-auto max-w-4xl">
         <div className="mb-8 flex justify-between gap-4">
           <Button asChild size="sm" variant="outline" >
-            <Link className="flex items-center gap-2" href="/create-room" >
+            <Link href="/" className="flex items-center gap-2"  >
               <ArrowLeft className="h-4 w-4" />
               Voltar ao início
             </Link>
           </Button>
-          <Button className="flex items-center gap-2" size="sm"  variant="outline" >
-            <Mic className="h-4 w-4" />
-            Gravar Áudio
+          <Button className="hover:cursor-pointer flex items-center gap-2" size="sm"  variant="outline" >
+            <Link href="/record-room-audio" className="flex items-center gap-2"  >
+              <Mic className="h-4 w-4" />
+              Gravar Áudio
+            </Link>
           </Button>
         </div>
         <div className="mb-6">

@@ -32,9 +32,6 @@
       "enabled": true
     }
   },
-  "extends": [
-    "ultracite"
-  ],
   "css": {
     "linter": {
       "enabled": false
