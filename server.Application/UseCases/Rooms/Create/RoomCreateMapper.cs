@@ -20,7 +20,8 @@ public static class RoomCreateMapper
         return new ResponseRoomJson
         {
             Id = room.Id,
-            Name = room.Name
+            Name = room.Name,
+            Description = room.Description
         };
     }
 }

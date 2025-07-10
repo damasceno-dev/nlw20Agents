@@ -15,12 +15,9 @@ public static class RoomGetAllMapper
         {
             Id = room.Id,
             Name = room.Name,
-            QuestionsCount = room.Questions.Count
+            Description = room.Description,
+            QuestionsCount = room.Questions.Count,
+            CreatedOn = room.CreatedOn
         };
-    }
-
-    public static List<ResponseRoomJson> ToResponseList(this IEnumerable<Room> rooms)
-    {
-        return rooms.Select(room => room.ToResponse()).ToList();
     }
 }

@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using server.Application.UseCases.Rooms.Create;
 using server.Application.UseCases.Rooms.GetAll;
+using server.Application.UseCases.Rooms.GetById;
 using server.Communication.Requests;
 using server.Communication.Responses;
 
@@ -20,6 +21,14 @@ namespace server.API.Controllers
         public async Task<IActionResult> GetAll([FromServices] RoomGetAllUseCase roomGetAllUseCase)
         {
             var response = await roomGetAllUseCase.Execute();
+            return Ok(response);
+        }
+        [HttpGet]
+        [Route("{roomId:guid}/getById")]
+        [ProducesResponseType(typeof(ResponseRoomJson), StatusCodes.Status200OK)]
+        public async Task<IActionResult> GetById([FromServices] RoomGetByIdUseCase roomGetByIdUseCase, [FromRoute]Guid roomId)
+        {
+            var response = await roomGetByIdUseCase.Execute(roomId);
             return Ok(response);
         }
         
