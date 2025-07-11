@@ -42,4 +42,22 @@
     <data name="AUDIO_INVALID_TYPE" xml:space="preserve">
         <value>Tipo inválido de áudio</value>
     </data>
+    <data name="OPENAI_AUDIO_TRANSCRIPTION_FAILED" xml:space="preserve">
+        <value>Não foi possível converter o áudio</value>
+    </data>
+    <data name="OPENAI_EMBEDDINGS_GENERATION_FAILED" xml:space="preserve">
+        <value>Não foi possível gerar os embeddings</value>
+    </data>
+    <data name="OPENAI_RESPONSE_FAILED" xml:space="preserve">
+        <value>Falha ao gerar resposta pelo OpenAI</value>
+    </data>
+    <data name="OPENAI_TRANSCRIBE_AUDIO_ERROR" xml:space="preserve">
+        <value>Erro ao transcrever áudio: {0}</value>
+    </data>
+    <data name="OPENAI_GENERATE_EMBEDDINGS_ERROR" xml:space="preserve">
+        <value>Erro ao gerar embeddings: {0}</value>
+    </data>
+    <data name="OPENAI_GENERATE_ANSWER_ERROR" xml:space="preserve">
+        <value>Erro ao gerar resposta: {0}</value>
+    </data>
 </root>

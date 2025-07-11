@@ -23,6 +23,7 @@
 
     <ItemGroup>
       <ProjectReference Include="..\server.Domain\server.Domain.csproj" />
+      <ProjectReference Include="..\server.Exceptions\server.Exceptions.csproj" />
     </ItemGroup>
 
     <ItemGroup>

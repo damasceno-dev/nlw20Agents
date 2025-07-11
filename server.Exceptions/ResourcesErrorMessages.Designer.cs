@@ -92,5 +92,41 @@ namespace server.Exceptions {
                 return ResourceManager.GetString("AUDIO_INVALID_TYPE", resourceCulture);
             }
         }
+        
+        public static string OPENAI_AUDIO_TRANSCRIPTION_FAILED {
+            get {
+                return ResourceManager.GetString("OPENAI_AUDIO_TRANSCRIPTION_FAILED", resourceCulture);
+            }
+        }
+        
+        public static string OPENAI_EMBEDDINGS_GENERATION_FAILED {
+            get {
+                return ResourceManager.GetString("OPENAI_EMBEDDINGS_GENERATION_FAILED", resourceCulture);
+            }
+        }
+        
+        public static string OPENAI_RESPONSE_FAILED {
+            get {
+                return ResourceManager.GetString("OPENAI_RESPONSE_FAILED", resourceCulture);
+            }
+        }
+        
+        public static string OPENAI_TRANSCRIBE_AUDIO_ERROR {
+            get {
+                return ResourceManager.GetString("OPENAI_TRANSCRIBE_AUDIO_ERROR", resourceCulture);
+            }
+        }
+        
+        public static string OPENAI_GENERATE_EMBEDDINGS_ERROR {
+            get {
+                return ResourceManager.GetString("OPENAI_GENERATE_EMBEDDINGS_ERROR", resourceCulture);
+            }
+        }
+        
+        public static string OPENAI_GENERATE_ANSWER_ERROR {
+            get {
+                return ResourceManager.GetString("OPENAI_GENERATE_ANSWER_ERROR", resourceCulture);
+            }
+        }
     }
 }

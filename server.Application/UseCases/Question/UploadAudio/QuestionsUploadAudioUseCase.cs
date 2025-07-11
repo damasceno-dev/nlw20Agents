@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using server.Application.UseCases.Question.Create;
@@ -13,12 +14,8 @@ using server.Application.UseCases.Question.Mapper;
 
 namespace server.Application.UseCases.Question.UploadAudio;
 
-public class QuestionsUploadAudioUseCase(
-    IQuestionsRepository questionsRepository,
-    IRoomsRepository roomsRepository,
-    IUnitOfWork unitOfWork)
+public class QuestionsUploadAudioUseCase(IQuestionsRepository questionsRepository,IRoomsRepository roomsRepository,IUnitOfWork unitOfWork, IArtificialIntelligenceService aiService)
 {
-
     public async Task<ResponseQuestionJson> Execute(IFormFile audioFile, Guid roomId)
     {
         var (isValid, error) = audioFile.ValidateAudioFile();
@@ -40,14 +37,11 @@ public class QuestionsUploadAudioUseCase(
 
     private async Task<string> ProcessAudioFile(IFormFile audioFile)
     {
-        // TODO: Implement audio processing logic
-        // This could include:
-        // - Saving file to storage
-        // - Converting speech to text
-        // - Cleaning up the text
-        // - etc.
-        
-        // For now, return a placeholder
-        return "Question from audio file: " + audioFile.FileName;
+        using var memoryStream = new MemoryStream();
+        await audioFile.CopyToAsync(memoryStream);
+        var audioBytes = memoryStream.ToArray();
+        var mimeType = audioFile.ContentType;
+
+        return await aiService.TranscribeAudioAsync(audioBytes, mimeType);
     }
 }

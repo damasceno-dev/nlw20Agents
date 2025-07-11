@@ -27,7 +27,7 @@ public static class InfraDependencyInjection
 
     private static void AddServices(IServiceCollection services)
     {
-        services.AddScoped<IArtificialIntelligenceService, ArtificialIntelligenceService>();
+        services.AddScoped<IArtificialIntelligenceService, ChatGptService>();
     }
 
     private static void AddDbContext(IServiceCollection services, IConfiguration configuration)

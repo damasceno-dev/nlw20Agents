@@ -1,19 +1,20 @@
+using Microsoft.Extensions.Configuration;
 using OpenAI;
 using OpenAI.Audio;
 using OpenAI.Chat;
 using OpenAI.Embeddings;
-using Microsoft.Extensions.Configuration;
 using server.Domain.Interfaces;
+using server.Exceptions;
 
 namespace server.Infrastructure.Services;
 
-public class ArtificialIntelligenceService : IArtificialIntelligenceService
+public class ChatGptService : IArtificialIntelligenceService
 {
     private readonly AudioClient _audioClient;
     private readonly ChatClient _chatClient;
     private readonly EmbeddingClient _embeddingClient;
 
-    public ArtificialIntelligenceService(IConfiguration configuration)
+    public ChatGptService(IConfiguration configuration)
     {
         var apiKey = configuration["OpenAI:ApiKey"];
         var openAIClient = new OpenAIClient(apiKey);
@@ -44,14 +45,14 @@ public class ArtificialIntelligenceService : IArtificialIntelligenceService
             
             if (string.IsNullOrEmpty(transcription.Value.Text))
             {
-                throw new Exception("Não foi possível converter o áudio");
+                throw new AIServiceException(ResourcesErrorMessages.OPENAI_AUDIO_TRANSCRIPTION_FAILED);
             }
 
             return transcription.Value.Text;
         }
         catch (Exception ex)
         {
-            throw new Exception($"Erro ao transcrever áudio: {ex.Message}", ex);
+            throw new AIServiceException(string.Format(ResourcesErrorMessages.OPENAI_TRANSCRIBE_AUDIO_ERROR, ex.Message), ex);
         }
     }
 
@@ -68,14 +69,14 @@ public class ArtificialIntelligenceService : IArtificialIntelligenceService
             
             if (response.Value == null)
             {
-                throw new Exception("Não foi possível gerar os embeddings.");
+                throw new AIServiceException(ResourcesErrorMessages.OPENAI_EMBEDDINGS_GENERATION_FAILED);
             }
 
             return response.Value.ToFloats().ToArray();
         }
         catch (Exception ex)
         {
-            throw new Exception($"Erro ao gerar embeddings: {ex.Message}", ex);
+            throw new AIServiceException(string.Format(ResourcesErrorMessages.OPENAI_GENERATE_EMBEDDINGS_ERROR, ex.Message), ex);
         }
     }
 
@@ -103,14 +104,14 @@ public class ArtificialIntelligenceService : IArtificialIntelligenceService
 
             if (response.Value?.Content == null || response.Value.Content.Count == 0)
             {
-                throw new Exception("Falha ao gerar resposta pelo OpenAI");
+                throw new AIServiceException(ResourcesErrorMessages.OPENAI_RESPONSE_FAILED);
             }
 
             return response.Value.Content[0].Text;
         }
         catch (Exception ex)
         {
-            throw new Exception($"Erro ao gerar resposta: {ex.Message}", ex);
+            throw new AIServiceException(string.Format(ResourcesErrorMessages.OPENAI_GENERATE_ANSWER_ERROR, ex.Message), ex);
         }
     }
 }
