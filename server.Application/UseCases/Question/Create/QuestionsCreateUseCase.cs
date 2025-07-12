@@ -9,7 +9,12 @@ using server.Exceptions;
 
 namespace server.Application.UseCases.Question.Create;
 
-public class QuestionsCreateUseCase(IRoomsRepository roomsRepository, IQuestionsRepository questionsRepository, IUnitOfWork unitOfWork)
+public class QuestionsCreateUseCase(
+    IRoomsRepository roomsRepository, 
+    IQuestionsRepository questionsRepository, 
+    IAudioRepository audioRepository,
+    IArtificialIntelligenceService aiService,
+    IUnitOfWork unitOfWork)
 {
     public async Task<ResponseQuestionJson> Execute(Guid roomId, RequestCreateQuestionJson request)
     {
@@ -21,7 +26,19 @@ public class QuestionsCreateUseCase(IRoomsRepository roomsRepository, IQuestions
         if (room is null)
             throw new NotFoundException(ResourcesErrorMessages.ROOM_DOESNT_EXISTS);
 
-        var question = request.ToDomain(room);
+
+        var questionEmbeddings = await aiService.GenerateEmbeddingsAsync(request.Question);
+        var similarChunks = await audioRepository.FindSimilarChunksAsync(roomId, questionEmbeddings);
+        var answer = string.Empty;
+        
+        if (similarChunks.Count > 0)
+        {
+            var transcriptions = similarChunks.Select(ac => ac.Transcription).ToList();
+            answer = await aiService.GenerateAnswerAsync(request.Question, transcriptions);
+        }
+
+        var question = request.ToDomain(room, answer);
+        
         await questionsRepository.Create(question);
         await unitOfWork.Commit();
 

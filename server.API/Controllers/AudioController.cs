@@ -12,7 +12,7 @@ namespace server.API.Controllers
     public class AudioController : ControllerBase
     {
         [HttpPost]
-        [Route("audio")]
+        [Route("upload")]
         [ProducesResponseType(typeof(ResponseAudioJson), StatusCodes.Status201Created)]
         [ProducesResponseType(typeof(ResponseErrorJson),StatusCodes.Status400BadRequest)]
         [ProducesResponseType(typeof(ResponseErrorJson),StatusCodes.Status404NotFound)]

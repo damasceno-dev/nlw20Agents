@@ -18,7 +18,7 @@ namespace server.Infrastructure.Migrations
                 {
                     Id = table.Column<Guid>(type: "uuid", nullable: false),
                     Transcription = table.Column<string>(type: "character varying(10000)", maxLength: 10000, nullable: false),
-                    Embeddings = table.Column<Vector>(type: "vector", nullable: false),
+                    Embeddings = table.Column<Vector>(type: "vector(1536)", nullable: false),
                     RoomId = table.Column<Guid>(type: "uuid", nullable: false),
                     CreatedOn = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
                     Active = table.Column<bool>(type: "boolean", nullable: false)

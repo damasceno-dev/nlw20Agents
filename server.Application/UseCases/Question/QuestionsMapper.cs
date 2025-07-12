@@ -8,12 +8,12 @@ namespace server.Application.UseCases.Question.Mapper;
 
 public static class QuestionsMapper
 {
-    public static Questions ToDomain(this RequestCreateQuestionJson request, Room room)
+    public static Questions ToDomain(this RequestCreateQuestionJson request, Room room, string answer = "")
     {
         return new Questions
         {
             Question = request.Question,
-            Answer = request.Answer,
+            Answer = answer,
             Room = room,
         };
     }
