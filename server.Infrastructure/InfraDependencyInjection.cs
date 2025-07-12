@@ -22,6 +22,7 @@ public static class InfraDependencyInjection
     {
         services.AddScoped<IRoomsRepository, RoomsRepository>();
         services.AddScoped<IQuestionsRepository, QuestionsRepository>();
+        services.AddScoped<IAudioRepository, AudioRepository>();
         services.AddScoped<IUnitOfWork, UnitOfWork>();
     }
 

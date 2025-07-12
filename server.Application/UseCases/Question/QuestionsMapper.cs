@@ -39,14 +39,4 @@ public static class QuestionsMapper
             CreatedOn = question.CreatedOn
         }).ToList();
     }
-    
-    public static Questions ToDomain(this string question, Room room)
-    {
-        return new Questions
-        {
-            Question = question,
-            Answer = "",
-            Room = room,
-        };
-    }
 }

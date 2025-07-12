@@ -5,7 +5,6 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using server.Application.UseCases.Question.Create;
 using server.Application.UseCases.Question.GetFromRoom;
-using server.Application.UseCases.Question.UploadAudio;
 using server.Communication.Requests;
 using server.Communication.Responses;
 
@@ -31,16 +30,6 @@ namespace server.API.Controllers
         public async Task<IActionResult> CreateRoomQuestions([FromServices] QuestionsCreateUseCase questionsCreateUseCase, [FromBody] RequestCreateQuestionJson request, [FromRoute] Guid roomId)
         {
             var response = await questionsCreateUseCase.Execute(roomId,request);
-            return Created(string.Empty, response);
-        }
-        
-        [HttpPost]
-        [Route("audio")]
-        [ProducesResponseType(typeof(ResponseQuestionJson), StatusCodes.Status201Created)]
-        [ProducesResponseType(StatusCodes.Status400BadRequest)]
-        public async Task<IActionResult> UploadAudio(IFormFile audioFile, [FromServices] QuestionsUploadAudioUseCase questionsUploadAudioUseCase, [FromRoute] Guid roomId)
-        {
-            var response = await questionsUploadAudioUseCase.Execute(audioFile, roomId);
             return Created(string.Empty, response);
         }
     }

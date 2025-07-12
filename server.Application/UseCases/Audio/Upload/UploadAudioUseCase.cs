@@ -1,22 +1,18 @@
 using System;
 using System.IO;
-using System.Linq;
 using System.Threading.Tasks;
-using server.Application.UseCases.Question.Create;
-using server.Communication.Responses;
-using server.Domain.Entities;
-using server.Domain.Interfaces;
-using server.Exceptions;
 using Microsoft.AspNetCore.Http;
 using server.Application.Services;
 using server.Application.UseCases.Question.Mapper;
+using server.Communication.Responses;
+using server.Domain.Interfaces;
+using server.Exceptions;
 
+namespace server.Application.UseCases.Audio.Upload;
 
-namespace server.Application.UseCases.Question.UploadAudio;
-
-public class QuestionsUploadAudioUseCase(IQuestionsRepository questionsRepository,IRoomsRepository roomsRepository,IUnitOfWork unitOfWork, IArtificialIntelligenceService aiService)
+public class UploadAudioUseCase(IAudioRepository audioRepository,IRoomsRepository roomsRepository,IUnitOfWork unitOfWork, IArtificialIntelligenceService aiService)
 {
-    public async Task<ResponseQuestionJson> Execute(IFormFile audioFile, Guid roomId)
+    public async Task<ResponseAudioJson> Execute(IFormFile audioFile, Guid roomId)
     {
         var (isValid, error) = audioFile.ValidateAudioFile();
         if (isValid is false)
@@ -26,13 +22,14 @@ public class QuestionsUploadAudioUseCase(IQuestionsRepository questionsRepositor
         if (room is null)
             throw new NotFoundException(ResourcesErrorMessages.ROOM_DOESNT_EXISTS);
 
-        var processedQuestion = await ProcessAudioFile(audioFile);
-        var question = processedQuestion.ToDomain(room);
+        var transcription = await ProcessAudioFile(audioFile);
+        var embedding = await aiService.GenerateEmbeddingsAsync(transcription);
+        var audioChunk = transcription.ToDomain(embedding, room);
 
-        await questionsRepository.Create(question);
+        await audioRepository.Create(audioChunk);
         await unitOfWork.Commit();
 
-        return question.ToResponse();
+        return audioChunk.ToResponse();
     }
 
     private async Task<string> ProcessAudioFile(IFormFile audioFile)
