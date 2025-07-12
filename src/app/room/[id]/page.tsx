@@ -2,10 +2,7 @@ import { ArrowLeft, Mic } from "lucide-react";
 import Link from "next/link";
 import { getQuestionsRoomIdList, getRoomsRoomIdGetbyid } from "@/api/generated/serverAPI";
 import { CreateQuestionForm } from "@/components/create-question-form";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { formatDate } from "@/utils/format-date";
 
 interface RoomPageProps {
   params: { id: string };
@@ -52,59 +49,9 @@ export default async function RoomPage({ params }: RoomPageProps) {
           )}
         </div>
 
-        <div className="grid grid-cols-1 gap-8 lg:grid-cols-3">
-          {/* Questions List */}
-          <div className="lg:col-span-2">
-            <p className="mb-2 text-gray-600">Gerencie suas perguntas e respostas</p>
-            <Card>
-              <CardHeader>
-                <CardTitle>Perguntas</CardTitle>
-                <CardDescription>
-                  {questions?.length === 0
-                    ? "Nenhuma pergunta ainda. Seja o primeiro a perguntar!"
-                    : `${questions?.length} pergunta${questions?.length === 1 ? "" : "s"}`}
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {questions?.map((question) => (
-                  <div className="rounded-lg border p-4" key={question.id}>
-                    <div className="mb-3 flex items-start justify-between">
-                      <h3 className="font-semibold text-lg">
-                        {question.question || "Pergunta sem título"}
-                      </h3>
-                      <Badge className="text-xs" variant="secondary">
-                        {formatDate(question.createdOn)}
-                      </Badge>
-                    </div>
-
-                    {question.answer && (
-                      <div className="mt-3 rounded-lg bg-gray-50 p-3">
-                        <p className="text-gray-700 text-sm">{question.answer}</p>
-                      </div>
-                    )}
-
-                    {!question.answer && (
-                      <div className="mt-2 text-gray-500 text-sm italic">
-                        Aguardando resposta...
-                      </div>
-                    )}
-                  </div>
-                ))}
-
-                {questions?.length === 0 && (
-                  <div className="py-8 text-center text-gray-500">
-                    <p>Nenhuma pergunta encontrada.</p>
-                    <p className="text-sm">Crie a primeira pergunta usando o formulário ao lado.</p>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </div>
-
-          {/* Create Question Form */}
-          <div>
-            <CreateQuestionForm roomId={id} />
-          </div>
+        <div>
+          <p className="mb-2 text-gray-600">Gerencie suas perguntas e respostas</p>
+          <CreateQuestionForm roomId={id} initialQuestions={questions} />
         </div>
       </div>
     </div>
