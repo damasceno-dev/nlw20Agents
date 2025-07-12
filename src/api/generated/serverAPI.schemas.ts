@@ -18,6 +18,21 @@ export interface RequestRoomCreateJson {
   description?: string | null;
 }
 
+export interface ResponseAudioJson {
+  /** @nullable */
+  transcription?: string | null;
+  createdOn?: string;
+  /** @nullable */
+  embeddings?: number[] | null;
+}
+
+export interface ResponseErrorJson {
+  /** @nullable */
+  errorMessages?: string[] | null;
+  /** @nullable */
+  method?: string | null;
+}
+
 export interface ResponseQuestionJson {
   id?: string;
   /** @nullable */
@@ -36,4 +51,8 @@ export interface ResponseRoomJson {
   questionsCount?: number;
   createdOn?: string;
 }
+
+export type PostAudioRoomIdUploadBody = {
+  audioFile?: Blob;
+};
 

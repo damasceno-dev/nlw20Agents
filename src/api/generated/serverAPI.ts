@@ -29,8 +29,11 @@ import type {
 } from '@tanstack/react-query';
 
 import type {
+  PostAudioRoomIdUploadBody,
   RequestCreateQuestionJson,
   RequestRoomCreateJson,
+  ResponseAudioJson,
+  ResponseErrorJson,
   ResponseQuestionJson,
   ResponseRoomJson
 } from './serverAPI.schemas';
@@ -40,151 +43,70 @@ import { customInstance } from '../mutator/custom-instance';
 
 
 
-export const getHealthcheck = (
-    
+export const postAudioRoomIdUpload = (
+    roomId: string,
+    postAudioRoomIdUploadBody: PostAudioRoomIdUploadBody,
  signal?: AbortSignal
 ) => {
       
-      
-      return customInstance<string>(
-      {url: `/healthcheck`, method: 'GET', signal
+      const formData = new FormData();
+if(postAudioRoomIdUploadBody.audioFile !== undefined) {
+ formData.append(`audioFile`, postAudioRoomIdUploadBody.audioFile)
+ }
+
+      return customInstance<ResponseAudioJson>(
+      {url: `/audio/${roomId}/upload`, method: 'POST',
+      headers: {'Content-Type': 'multipart/form-data', },
+       data: formData, signal
     },
       );
     }
   
 
-export const getGetHealthcheckQueryKey = () => {
-    return [`/healthcheck`] as const;
+
+export const getPostAudioRoomIdUploadMutationOptions = <TError = ResponseErrorJson,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postAudioRoomIdUpload>>, TError,{roomId: string;data: PostAudioRoomIdUploadBody}, TContext>, }
+): UseMutationOptions<Awaited<ReturnType<typeof postAudioRoomIdUpload>>, TError,{roomId: string;data: PostAudioRoomIdUploadBody}, TContext> => {
+
+const mutationKey = ['postAudioRoomIdUpload'];
+const {mutation: mutationOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }};
+
+      
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postAudioRoomIdUpload>>, {roomId: string;data: PostAudioRoomIdUploadBody}> = (props) => {
+          const {roomId,data} = props ?? {};
+
+          return  postAudioRoomIdUpload(roomId,data,)
+        }
+
+        
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PostAudioRoomIdUploadMutationResult = NonNullable<Awaited<ReturnType<typeof postAudioRoomIdUpload>>>
+    export type PostAudioRoomIdUploadMutationBody = PostAudioRoomIdUploadBody
+    export type PostAudioRoomIdUploadMutationError = ResponseErrorJson
+
+    export const usePostAudioRoomIdUpload = <TError = ResponseErrorJson,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postAudioRoomIdUpload>>, TError,{roomId: string;data: PostAudioRoomIdUploadBody}, TContext>, }
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof postAudioRoomIdUpload>>,
+        TError,
+        {roomId: string;data: PostAudioRoomIdUploadBody},
+        TContext
+      > => {
+
+      const mutationOptions = getPostAudioRoomIdUploadMutationOptions(options);
+
+      return useMutation(mutationOptions , queryClient);
     }
-
     
-export const getGetHealthcheckInfiniteQueryOptions = <TData = InfiniteData<Awaited<ReturnType<typeof getHealthcheck>>>, TError = unknown>( options?: { query?:Partial<UseInfiniteQueryOptions<Awaited<ReturnType<typeof getHealthcheck>>, TError, TData>>, }
-) => {
-
-const {query: queryOptions} = options ?? {};
-
-  const queryKey =  queryOptions?.queryKey ?? getGetHealthcheckQueryKey();
-
-  
-
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof getHealthcheck>>> = ({ signal }) => getHealthcheck(signal);
-
-      
-
-      
-
-   return  { queryKey, queryFn, ...queryOptions} as UseInfiniteQueryOptions<Awaited<ReturnType<typeof getHealthcheck>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
-}
-
-export type GetHealthcheckInfiniteQueryResult = NonNullable<Awaited<ReturnType<typeof getHealthcheck>>>
-export type GetHealthcheckInfiniteQueryError = unknown
-
-
-export function useGetHealthcheckInfinite<TData = InfiniteData<Awaited<ReturnType<typeof getHealthcheck>>>, TError = unknown>(
-  options: { query:Partial<UseInfiniteQueryOptions<Awaited<ReturnType<typeof getHealthcheck>>, TError, TData>> & Pick<
-        DefinedInitialDataOptions<
-          Awaited<ReturnType<typeof getHealthcheck>>,
-          TError,
-          Awaited<ReturnType<typeof getHealthcheck>>
-        > , 'initialData'
-      >, }
- , queryClient?: QueryClient
-  ):  DefinedUseInfiniteQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useGetHealthcheckInfinite<TData = InfiniteData<Awaited<ReturnType<typeof getHealthcheck>>>, TError = unknown>(
-  options?: { query?:Partial<UseInfiniteQueryOptions<Awaited<ReturnType<typeof getHealthcheck>>, TError, TData>> & Pick<
-        UndefinedInitialDataOptions<
-          Awaited<ReturnType<typeof getHealthcheck>>,
-          TError,
-          Awaited<ReturnType<typeof getHealthcheck>>
-        > , 'initialData'
-      >, }
- , queryClient?: QueryClient
-  ):  UseInfiniteQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useGetHealthcheckInfinite<TData = InfiniteData<Awaited<ReturnType<typeof getHealthcheck>>>, TError = unknown>(
-  options?: { query?:Partial<UseInfiniteQueryOptions<Awaited<ReturnType<typeof getHealthcheck>>, TError, TData>>, }
- , queryClient?: QueryClient
-  ):  UseInfiniteQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-
-export function useGetHealthcheckInfinite<TData = InfiniteData<Awaited<ReturnType<typeof getHealthcheck>>>, TError = unknown>(
-  options?: { query?:Partial<UseInfiniteQueryOptions<Awaited<ReturnType<typeof getHealthcheck>>, TError, TData>>, }
- , queryClient?: QueryClient 
- ):  UseInfiniteQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
-
-  const queryOptions = getGetHealthcheckInfiniteQueryOptions(options)
-
-  const query = useInfiniteQuery(queryOptions , queryClient) as  UseInfiniteQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-
-  query.queryKey = queryOptions.queryKey ;
-
-  return query;
-}
-
-
-
-export const getGetHealthcheckQueryOptions = <TData = Awaited<ReturnType<typeof getHealthcheck>>, TError = unknown>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getHealthcheck>>, TError, TData>>, }
-) => {
-
-const {query: queryOptions} = options ?? {};
-
-  const queryKey =  queryOptions?.queryKey ?? getGetHealthcheckQueryKey();
-
-  
-
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof getHealthcheck>>> = ({ signal }) => getHealthcheck(signal);
-
-      
-
-      
-
-   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getHealthcheck>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
-}
-
-export type GetHealthcheckQueryResult = NonNullable<Awaited<ReturnType<typeof getHealthcheck>>>
-export type GetHealthcheckQueryError = unknown
-
-
-export function useGetHealthcheck<TData = Awaited<ReturnType<typeof getHealthcheck>>, TError = unknown>(
-  options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getHealthcheck>>, TError, TData>> & Pick<
-        DefinedInitialDataOptions<
-          Awaited<ReturnType<typeof getHealthcheck>>,
-          TError,
-          Awaited<ReturnType<typeof getHealthcheck>>
-        > , 'initialData'
-      >, }
- , queryClient?: QueryClient
-  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useGetHealthcheck<TData = Awaited<ReturnType<typeof getHealthcheck>>, TError = unknown>(
-  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getHealthcheck>>, TError, TData>> & Pick<
-        UndefinedInitialDataOptions<
-          Awaited<ReturnType<typeof getHealthcheck>>,
-          TError,
-          Awaited<ReturnType<typeof getHealthcheck>>
-        > , 'initialData'
-      >, }
- , queryClient?: QueryClient
-  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useGetHealthcheck<TData = Awaited<ReturnType<typeof getHealthcheck>>, TError = unknown>(
-  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getHealthcheck>>, TError, TData>>, }
- , queryClient?: QueryClient
-  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-
-export function useGetHealthcheck<TData = Awaited<ReturnType<typeof getHealthcheck>>, TError = unknown>(
-  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getHealthcheck>>, TError, TData>>, }
- , queryClient?: QueryClient 
- ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
-
-  const queryOptions = getGetHealthcheckQueryOptions(options)
-
-  const query = useQuery(queryOptions , queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-
-  query.queryKey = queryOptions.queryKey ;
-
-  return query;
-}
-
-
-
-
 export const getQuestionsRoomIdList = (
     roomId: string,
  signal?: AbortSignal

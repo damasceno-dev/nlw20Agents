@@ -35,8 +35,9 @@ export default async function RoomPage({ params }: RoomPageProps) {
             className="hover:cursor-pointer flex items-center gap-2"
             size="sm"
             variant="outline"
+            asChild
           >
-            <Link href="/record-room-audio" className="flex items-center gap-2">
+            <Link href={`/record-room-audio/${id}`} className="flex items-center gap-2">
               <Mic className="h-4 w-4" />
               Gravar Áudio
             </Link>

@@ -75,7 +75,7 @@ export function CreateQuestionForm({ roomId, initialQuestions = [] }: CreateQues
         return { previousQuestions };
       },
       // If the mutation fails, roll back to the previous value
-      onError: (err, _newQuestion, context) => {
+      onError: (err, newQuestion, context) => {
         console.error("Failed to create question:", err);
         queryClient.setQueryData(
           getGetQuestionsRoomIdListQueryKey(roomId),
