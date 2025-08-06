@@ -48,12 +48,12 @@ public static class InfraDependencyInjection
 
         try
         {
-            Console.WriteLine("Seeding...");
+            Console.WriteLine(@"Seeding...");
             var dbContext = scopedServices.GetRequiredService<ServerDbContext>();
             
             if (await dbContext.Rooms.AnyAsync())
             {
-                Console.WriteLine("Database already seeded");
+                Console.WriteLine(@"Database already seeded");
                 return;
             }
             
@@ -91,11 +91,9 @@ public static class InfraDependencyInjection
             var answeredCount = allQuestions.Count(q => !string.IsNullOrEmpty(q.Answer));
             var unansweredCount = allQuestions.Count - answeredCount;
         
-            Console.WriteLine($"Seeded successfully: {rooms.Count} rooms with {allQuestions.Count} total questions");
-            Console.WriteLine($"  - {answeredCount} questions with answers");
-            Console.WriteLine($"  - {unansweredCount} questions without answers");
-
-
+            Console.WriteLine($@"Seeded successfully: {rooms.Count} rooms with {allQuestions.Count} total questions");
+            Console.WriteLine($@"  - {answeredCount} questions with answers");
+            Console.WriteLine($@"  - {unansweredCount} questions without answers");
         }
         catch (Exception e)
         {
@@ -103,4 +101,21 @@ public static class InfraDependencyInjection
             throw;
         }
     }
+    
+    //Migrations follow the history table and are only full applied if the history is empty
+    public static async Task DatabaseSetup(this IServiceProvider serviceProvider)
+    {
+        using var scope = serviceProvider.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<ServerDbContext>();
+
+        Console.WriteLine(@"Enabling pgvector extension...");
+        await dbContext.Database.ExecuteSqlRawAsync("CREATE EXTENSION IF NOT EXISTS vector");
+        Console.WriteLine(@"pgvector extension enabled successfully.");
+
+        Console.WriteLine(@"Applying migrations...");
+        await dbContext.Database.MigrateAsync();
+        Console.WriteLine(@"Migrations applied successfully.");
+
+    }
+
 }

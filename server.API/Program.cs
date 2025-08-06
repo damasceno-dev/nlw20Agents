@@ -23,6 +23,8 @@ builder.Services.AddInfrastructure(builder.Configuration);
 
 var app = builder.Build();
 
+// Apply migrations and setup pgvector
+await app.Services.DatabaseSetup();
 
 if (args.Length > 0 && args[0] == "seed-database")
 {
@@ -31,12 +33,9 @@ if (args.Length > 0 && args[0] == "seed-database")
 }
 
 // Configure the HTTP request pipeline.
-if (app.Environment.IsDevelopment())
-{
-    app.MapOpenApi();
-    app.UseSwagger();
-    app.UseSwaggerUI();
-}
+app.MapOpenApi();
+app.UseSwagger();
+app.UseSwaggerUI();
 
 app.UseHttpsRedirection();
 
