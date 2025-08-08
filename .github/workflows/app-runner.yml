@@ -2,7 +2,7 @@ name: "Deploy AWS App Runner"
 
 on:
   workflow_dispatch:  # Allows manual execution
-      
+
 permissions:
   id-token: write
   contents: read
