@@ -6,7 +6,7 @@ terraform {
     }
   }
   backend "s3" {
-    bucket  = "devstage-terraform-state-unique1029"  # Must match the bucket created in 1-admin
+    bucket  = "agents-terraform-state-unique1029"  # Must match the bucket created in 1-admin
     key     = "3-apprunner/terraform.tfstate"
     region  = "us-east-1"
     encrypt = true
@@ -17,7 +17,7 @@ data "aws_caller_identity" "current" {}
 data "terraform_remote_state" "admin" {
   backend = "s3"
   config = {
-    bucket = "devstage-terraform-state-unique1029"
+    bucket = "agents-terraform-state-unique1029"
     key    = "1-admin/terraform.tfstate"
     region = "us-east-1"
   }
@@ -25,7 +25,7 @@ data "terraform_remote_state" "admin" {
 data "terraform_remote_state" "resources" {
   backend = "s3"
   config = {
-    bucket = "devstage-terraform-state-unique1029"
+    bucket = "agents-terraform-state-unique1029"
     key    = "2-resources/terraform.tfstate"
     region = "us-east-1"
   }

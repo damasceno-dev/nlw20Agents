@@ -13,7 +13,7 @@ terraform {
     }
   }
   backend "s3" {
-    bucket         = "devstage-terraform-state-unique1029"  # This bucket must be created manually.
+    bucket         = "agents-terraform-state-unique1029"  # This bucket must be created manually.
     key            = "1-admin/terraform.tfstate"        # The path within the bucket for the state file.
     region         = "us-east-1"                      # The region where your bucket is located.
     encrypt        = true                             # Encrypt the state file at rest.

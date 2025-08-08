@@ -19,7 +19,7 @@
         "iam:ListAttachedGroupPolicies",
         "iam:DeletePolicyVersion"
       ],
-      "Resource": "arn:aws:iam::533267083060:policy/devstage-*"
+      "Resource": "arn:aws:iam::533267083060:policy/agents-*"
     },
     {
       "Effect": "Allow",
@@ -48,7 +48,7 @@
         "iam:AddUserToGroup",
         "iam:RemoveUserFromGroup"
       ],
-      "Resource": "arn:aws:iam::533267083060:group/devstage-*"
+      "Resource": "arn:aws:iam::533267083060:group/agents-*"
     },
     {
       "Effect": "Allow",
@@ -62,8 +62,8 @@
         "s3:PutBucketVersioning"
       ],
       "Resource": [
-        "arn:aws:s3:::devstage-terraform-state-unique1029",
-        "arn:aws:s3:::devstage-terraform-state-unique1029/*"
+        "arn:aws:s3:::agents-terraform-state-unique1029",
+        "arn:aws:s3:::agents-terraform-state-unique1029/*"
       ]
     }
   ]

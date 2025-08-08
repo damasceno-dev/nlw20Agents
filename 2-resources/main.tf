@@ -6,7 +6,7 @@ terraform {
     }
   }
   backend "s3" {
-    bucket  = "devstage-terraform-state-unique1029"  # Must match the bucket created in 1-admin
+    bucket  = "agents-terraform-state-unique1029"  # Must match the bucket created in 1-admin
     key     = "2-resources/terraform.tfstate"
     region  = "us-east-1"
     encrypt = true
@@ -15,7 +15,7 @@ terraform {
 data "terraform_remote_state" "admin" {
   backend = "s3"
   config = {
-    bucket  = "devstage-terraform-state-unique1029"  # S3 bucket storing state from 1-admin
+    bucket  = "agents-terraform-state-unique1029"  # S3 bucket storing state from 1-admin
     key     = "1-admin/terraform.tfstate"               # Match the key from 1-admin
     region  = "us-east-1"
   }
