@@ -35,12 +35,12 @@ module "vpc" {
   vpc_cidr_block = var.vpc_cidr_block
 }
 
-module "rds" {
-  source    = "./modules/rds"
-  prefix    = data.terraform_remote_state.admin.outputs.prefix
-  vpc_id    = module.vpc.vpc_id
-  subnet_ids = module.vpc.subnet_ids
-  db_name   = data.terraform_remote_state.admin.outputs.prefix
+module "aurora" {
+  source      = "./modules/aurora"
+  prefix      = data.terraform_remote_state.admin.outputs.prefix
+  vpc_id      = module.vpc.vpc_id
+  subnet_ids  = module.vpc.subnet_ids
+  db_name     = data.terraform_remote_state.admin.outputs.prefix
   db_username = "postgres"
   db_password = var.db_password
 }
