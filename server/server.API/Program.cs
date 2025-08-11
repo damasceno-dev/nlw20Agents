@@ -1,0 +1,49 @@
+using Microsoft.AspNetCore.Builder;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
+using server.API;
+using server.API.Filters;
+using server.Application;
+using server.Infrastructure;
+
+var builder = WebApplication.CreateBuilder(args);
+
+// Add services to the container.
+
+builder.Services.AddControllers();
+// Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
+builder.Services.AddOpenApi();
+builder.Services.AddSwaggerGen();
+
+builder.Services.AddRouting(options => options.LowercaseUrls = true);
+builder.Services.AddMvc(options => options.Filters.Add<ExceptionFilter>());
+builder.Services.AddApi(builder.Environment);
+builder.Services.AddApplication();
+builder.Services.AddInfrastructure(builder.Configuration);
+
+var app = builder.Build();
+
+// Apply migrations and setup pgvector
+await app.Services.DatabaseSetup();
+
+if (args.Length > 0 && args[0] == "seed-database")
+{
+    await app.Services.SeedDatabase();
+    return;
+}
+
+// Configure the HTTP request pipeline.
+app.MapOpenApi();
+app.UseSwagger();
+app.UseSwaggerUI();
+
+app.UseHttpsRedirection();
+
+// Enable CORS
+app.UseCors("AllowFrontend");
+
+app.UseAuthorization();
+
+app.MapControllers();
+
+app.Run();
