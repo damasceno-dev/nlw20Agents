@@ -1,0 +1,300 @@
+name: "Deploy Full Stack"
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      deploy_infra:
+        description: 'Deploy Infrastructure'
+        required: false
+        type: boolean
+        default: true
+      deploy_server:
+        description: 'Deploy Server'
+        required: false
+        type: boolean
+        default: true
+      deploy_app_runner:
+        description: 'Deploy App Runner'
+        required: false
+        type: boolean
+        default: true
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  # ==========================================
+  # STAGE 1: Infrastructure Deployment
+  # ==========================================
+  deploy_admin:
+    name: "Deploy Admin Infrastructure"
+    runs-on: ubuntu-latest
+    if: ${{ github.event.inputs.deploy_infra != 'false' }}
+    outputs:
+      admin_complete: ${{ steps.completion.outputs.done }}
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Create .secrets file
+        run: |
+          echo "${{ secrets.UNIFIED_SECRETS_B64 }}" | base64 -d > .secrets
+          chmod 600 .secrets
+
+      - name: Load Environment Variables and Create tfvars
+        run: |
+          export $(cat .secrets | xargs)
+          echo "AWS_REGION=${AWS_REGION}" >> $GITHUB_ENV
+          echo "AWS_ADMIN_ACCESS_KEY_ID=${AWS_ADMIN_ACCESS_KEY_ID}" >> $GITHUB_ENV
+          echo "AWS_ADMIN_SECRET_ACCESS_KEY=${AWS_ADMIN_SECRET_ACCESS_KEY}" >> $GITHUB_ENV
+          echo "TF_VAR_PREFIX=${TF_VAR_PREFIX}" >> $GITHUB_ENV
+          echo "TF_VAR_RESOURCES_CREATOR_PROFILE=${TF_VAR_RESOURCES_CREATOR_PROFILE}" >> $GITHUB_ENV
+          
+          cat <<EOF > infra/1-admin/terraform.tfvars
+          prefix = "${TF_VAR_PREFIX}"
+          resources_creator_profile = "${TF_VAR_RESOURCES_CREATOR_PROFILE}"
+          EOF
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.6.0"
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          aws-access-key-id: ${{ env.AWS_ADMIN_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ env.AWS_ADMIN_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Terraform Init & Apply (Admin)
+        working-directory: infra/1-admin
+        run: |
+          terraform init -reconfigure
+          terraform apply -auto-approve -var-file=terraform.tfvars
+
+      - name: Mark Completion
+        id: completion
+        run: echo "done=true" >> $GITHUB_OUTPUT
+
+  deploy_resources:
+    name: "Deploy AWS Resources"
+    runs-on: ubuntu-latest
+    needs: deploy_admin
+    if: ${{ github.event.inputs.deploy_infra != 'false' }}
+    outputs:
+      aurora_endpoint: ${{ steps.tf_outputs.outputs.aurora_endpoint }}
+      ecr_url: ${{ steps.tf_outputs.outputs.ecr_url }}
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Create .secrets file
+        run: |
+          echo "${{ secrets.UNIFIED_SECRETS_B64 }}" | base64 -d > .secrets
+          chmod 600 .secrets
+
+      - name: Load Resources Creator Environment Variables
+        run: |
+          export $(cat .secrets | xargs)
+          echo "AWS_REGION=${AWS_REGION}" >> $GITHUB_ENV
+          echo "AWS_RESOURCES_CREATOR_ACCESS_KEY_ID=${AWS_RESOURCES_CREATOR_ACCESS_KEY_ID}" >> $GITHUB_ENV
+          echo "AWS_RESOURCES_CREATOR_SECRET_ACCESS_KEY=${AWS_RESOURCES_CREATOR_SECRET_ACCESS_KEY}" >> $GITHUB_ENV
+          echo "TF_VAR_DB_PASSWORD=${TF_VAR_DB_PASSWORD}" >> $GITHUB_ENV
+          
+          echo "::add-mask::$TF_VAR_DB_PASSWORD"
+          
+          cat <<EOF > infra/2-resources/terraform.tfvars
+          db_password = "${TF_VAR_DB_PASSWORD}"
+          EOF
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.6.0"
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          aws-access-key-id: ${{ env.AWS_RESOURCES_CREATOR_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ env.AWS_RESOURCES_CREATOR_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Terraform Init & Apply (Resources)
+        working-directory: infra/2-resources
+        run: |
+          terraform init -reconfigure
+          terraform apply -auto-approve -var-file=terraform.tfvars
+
+      - name: Retrieve Terraform Outputs
+        id: tf_outputs
+        working-directory: infra/2-resources
+        run: |
+          AURORA_ENDPOINT=$(terraform output -raw aurora_cluster_endpoint)
+          ECR_URL=$(terraform output -raw ecr_repository_url)
+          echo "aurora_endpoint=${AURORA_ENDPOINT}" >> $GITHUB_OUTPUT
+          echo "ecr_url=${ECR_URL}" >> $GITHUB_OUTPUT
+          echo "AURORA_ENDPOINT=${AURORA_ENDPOINT}" >> $GITHUB_ENV
+          echo "ECR_URL=${ECR_URL}" >> $GITHUB_ENV
+
+      - name: Display Outputs
+        run: |
+          echo "Aurora Endpoint: ${{ env.AURORA_ENDPOINT }}"
+          echo "ECR Repository URL: ${{ env.ECR_URL }}"
+
+  # ==========================================
+  # STAGE 2: Server Deployment (Docker to ECR)
+  # ==========================================
+  deploy_server:
+    name: "Build and Deploy Server to ECR"
+    runs-on: ubuntu-latest
+    needs: deploy_resources
+    if: ${{ github.event.inputs.deploy_server != 'false' }}
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Create .secrets file
+        run: |
+          echo "${{ secrets.UNIFIED_SECRETS_B64 }}" | base64 -d > .secrets
+          chmod 600 .secrets
+
+      - name: Generate appsettings.Production.json
+        run: |
+          # Load environment variables
+          export $(cat .secrets | xargs)
+          
+          # Get infrastructure outputs from previous job
+          AURORA_ENDPOINT="${{ needs.deploy_resources.outputs.aurora_endpoint }}"
+          ECR_URL="${{ needs.deploy_resources.outputs.ecr_url }}"
+          
+          # Create appsettings.Production.json dynamically
+          cat <<EOF > server/server.API/appsettings.Production.json
+          {
+            "ConnectionStrings": {
+              "DefaultConnection": "Host=${AURORA_ENDPOINT};Database=${DB_NAME:-nlw20agents};Username=${DB_USERNAME:-postgres};Password=${TF_VAR_DB_PASSWORD}"
+            },
+            "Logging": {
+              "LogLevel": {
+                "Default": "Information",
+                "Microsoft.AspNetCore": "Warning"
+              }
+            },
+            "OpenAI": {
+              "ApiKey": "${OPENAI_API_KEY}"
+            },
+            "AwsCredentials": {
+              "AwsDefaultRegion": "${AWS_REGION}",
+              "AwsRegion": "${AWS_REGION}",
+              "AwsResourcesCreatorAccessKeyId": "${AWS_RESOURCES_CREATOR_ACCESS_KEY_ID}",
+              "AwsResourcesCreatorSecretKey": "${AWS_RESOURCES_CREATOR_SECRET_ACCESS_KEY}",
+              "AwsEcrUrl": "${ECR_URL}"
+            }
+          }
+          EOF
+          
+          # Validate JSON
+          jq . server/server.API/appsettings.Production.json
+          
+          # Set environment variables for AWS
+          echo "AWS_REGION=${AWS_REGION}" >> $GITHUB_ENV
+          echo "AWS_ACCESS_KEY_ID=${AWS_RESOURCES_CREATOR_ACCESS_KEY_ID}" >> $GITHUB_ENV
+          echo "AWS_SECRET_ACCESS_KEY=${AWS_RESOURCES_CREATOR_SECRET_ACCESS_KEY}" >> $GITHUB_ENV
+          echo "ECR_URL=${ECR_URL}" >> $GITHUB_ENV
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Get short commit hash
+        id: vars
+        run: echo "SHORT_SHA=$(git rev-parse --short=7 HEAD)" >> $GITHUB_ENV
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ env.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ env.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build, tag, and push image to Amazon ECR
+        working-directory: server
+        run: |
+          # Build the Docker image
+          docker build -t ${{ env.ECR_URL }}:latest -t ${{ env.ECR_URL }}:${{ env.SHORT_SHA }} -f Dockerfile .
+          
+          # Push both tags
+          docker push ${{ env.ECR_URL }}:latest
+          docker push ${{ env.ECR_URL }}:${{ env.SHORT_SHA }}
+
+      - name: Verify Pushed Images
+        run: |
+          echo "Successfully pushed images to ECR:"
+          echo " - ${{ env.ECR_URL }}:latest"
+          echo " - ${{ env.ECR_URL }}:${{ env.SHORT_SHA }}"
+          
+          REPO_NAME=$(echo ${{ env.ECR_URL }} | awk -F'/' '{print $NF}')
+          aws ecr list-images --repository-name ${REPO_NAME} --region ${{ env.AWS_REGION }}
+
+  # ==========================================
+  # STAGE 3: App Runner Deployment
+  # ==========================================
+  deploy_app_runner:
+    name: "Deploy App Runner"
+    runs-on: ubuntu-latest
+    needs: [deploy_resources, deploy_server]
+    if: ${{ github.event.inputs.deploy_app_runner != 'false' }}
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Create .secrets file
+        run: |
+          echo "${{ secrets.UNIFIED_SECRETS_B64 }}" | base64 -d > .secrets
+          chmod 600 .secrets
+
+      - name: Load Environment Variables
+        run: |
+          export $(cat .secrets | xargs)
+          echo "AWS_REGION=${AWS_REGION}" >> $GITHUB_ENV
+          echo "AWS_RESOURCES_CREATOR_ACCESS_KEY_ID=${AWS_RESOURCES_CREATOR_ACCESS_KEY_ID}" >> $GITHUB_ENV
+          echo "AWS_RESOURCES_CREATOR_SECRET_ACCESS_KEY=${AWS_RESOURCES_CREATOR_SECRET_ACCESS_KEY}" >> $GITHUB_ENV
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.6.0"
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          aws-access-key-id: ${{ env.AWS_RESOURCES_CREATOR_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ env.AWS_RESOURCES_CREATOR_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Terraform Init & Apply (App Runner)
+        working-directory: infra/3-apprunner
+        run: |
+          terraform init -reconfigure
+          terraform apply -auto-approve
+
+      - name: Retrieve App Runner URL
+        working-directory: infra/3-apprunner
+        run: |
+          APP_RUNNER_URL=$(terraform output -raw app_runner_service_url)
+          echo "App Runner URL: ${APP_RUNNER_URL}"
+          echo "APP_RUNNER_URL=${APP_RUNNER_URL}" >> $GITHUB_ENV
+
+      - name: Summary
+        run: |
+          echo "## Deployment Complete! 🚀" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### App Runner URL" >> $GITHUB_STEP_SUMMARY
+          echo "🔗 https://${{ env.APP_RUNNER_URL }}" >> $GITHUB_STEP_SUMMARY

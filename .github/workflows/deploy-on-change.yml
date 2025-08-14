@@ -1,0 +1,287 @@
+name: "Deploy on Component Change"
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'infra/**'
+      - 'server/**'
+      - 'web/**'
+      - '.github/workflows/deploy-on-change.yml'
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  detect_changes:
+    name: "Detect Changed Components"
+    runs-on: ubuntu-latest
+    outputs:
+      infra_changed: ${{ steps.changes.outputs.infra }}
+      server_changed: ${{ steps.changes.outputs.server }}
+      web_changed: ${{ steps.changes.outputs.web }}
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Check for changes
+        id: changes
+        run: |
+          # Get list of changed files
+          CHANGED_FILES=$(git diff --name-only HEAD^ HEAD)
+          
+          # Check for infrastructure changes
+          if echo "$CHANGED_FILES" | grep -q "^infra/"; then
+            echo "infra=true" >> $GITHUB_OUTPUT
+            echo "📦 Infrastructure changes detected"
+          else
+            echo "infra=false" >> $GITHUB_OUTPUT
+          fi
+          
+          # Check for server changes
+          if echo "$CHANGED_FILES" | grep -q "^server/"; then
+            echo "server=true" >> $GITHUB_OUTPUT
+            echo "🖥️ Server changes detected"
+          else
+            echo "server=false" >> $GITHUB_OUTPUT
+          fi
+          
+          # Check for web changes
+          if echo "$CHANGED_FILES" | grep -q "^web/"; then
+            echo "web=true" >> $GITHUB_OUTPUT
+            echo "🌐 Web changes detected"
+          else
+            echo "web=false" >> $GITHUB_OUTPUT
+          fi
+
+  deploy_infrastructure:
+    name: "Deploy Infrastructure Changes"
+    needs: detect_changes
+    if: ${{ needs.detect_changes.outputs.infra_changed == 'true' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Create .secrets file
+        run: |
+          echo "${{ secrets.UNIFIED_SECRETS_B64 }}" | base64 -d > .secrets
+          chmod 600 .secrets
+
+      - name: Deploy Infrastructure
+        run: |
+          echo "🏗️ Deploying infrastructure changes..."
+          # This would trigger the infrastructure deployment
+          # For now, we'll use workflow_dispatch to trigger the main workflow
+
+      - name: Trigger Full Infrastructure Deploy
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.actions.createWorkflowDispatch({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              workflow_id: 'deploy-full-stack.yml',
+              ref: 'main',
+              inputs: {
+                deploy_infra: 'true',
+                deploy_server: 'false',
+                deploy_app_runner: 'true'
+              }
+            });
+
+  deploy_server:
+    name: "Deploy Server Changes"
+    needs: detect_changes
+    if: ${{ needs.detect_changes.outputs.server_changed == 'true' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Create .secrets file
+        run: |
+          echo "${{ secrets.UNIFIED_SECRETS_B64 }}" | base64 -d > .secrets
+          chmod 600 .secrets
+
+      - name: Load Environment Variables
+        run: |
+          export $(cat .secrets | xargs)
+          echo "AWS_REGION=${AWS_REGION}" >> $GITHUB_ENV
+          echo "AWS_RESOURCES_CREATOR_ACCESS_KEY_ID=${AWS_RESOURCES_CREATOR_ACCESS_KEY_ID}" >> $GITHUB_ENV
+          echo "AWS_RESOURCES_CREATOR_SECRET_ACCESS_KEY=${AWS_RESOURCES_CREATOR_SECRET_ACCESS_KEY}" >> $GITHUB_ENV
+
+      - name: Setup Terraform to Get Outputs
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.6.0"
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ env.AWS_RESOURCES_CREATOR_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ env.AWS_RESOURCES_CREATOR_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Get Infrastructure Outputs
+        id: get_outputs
+        working-directory: infra/2-resources
+        run: |
+          terraform init -reconfigure
+          AURORA_ENDPOINT=$(terraform output -raw aurora_cluster_endpoint 2>/dev/null || echo "")
+          ECR_URL=$(terraform output -raw ecr_repository_url 2>/dev/null || echo "")
+          
+          if [ -z "$ECR_URL" ]; then
+            echo "❌ ECR URL not found. Infrastructure might not be deployed."
+            exit 1
+          fi
+          
+          echo "ECR_URL=${ECR_URL}" >> $GITHUB_ENV
+          echo "AURORA_ENDPOINT=${AURORA_ENDPOINT}" >> $GITHUB_ENV
+
+      - name: Generate appsettings.Production.json
+        run: |
+          export $(cat .secrets | xargs)
+          
+          cat <<EOF > server/server.API/appsettings.Production.json
+          {
+            "ConnectionStrings": {
+              "DefaultConnection": "Host=${AURORA_ENDPOINT};Database=${DB_NAME:-nlw20agents};Username=${DB_USERNAME:-postgres};Password=${TF_VAR_DB_PASSWORD}"
+            },
+            "Logging": {
+              "LogLevel": {
+                "Default": "Information",
+                "Microsoft.AspNetCore": "Warning"
+              }
+            },
+            "OpenAI": {
+              "ApiKey": "${OPENAI_API_KEY}"
+            },
+            "AwsCredentials": {
+              "AwsDefaultRegion": "${AWS_REGION}",
+              "AwsRegion": "${AWS_REGION}",
+              "AwsResourcesCreatorAccessKeyId": "${AWS_RESOURCES_CREATOR_ACCESS_KEY_ID}",
+              "AwsResourcesCreatorSecretKey": "${AWS_RESOURCES_CREATOR_SECRET_ACCESS_KEY}",
+              "AwsEcrUrl": "${ECR_URL}"
+            }
+          }
+          EOF
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Get short commit hash
+        run: echo "SHORT_SHA=$(git rev-parse --short=7 HEAD)" >> $GITHUB_ENV
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and Push Docker Image
+        working-directory: server
+        run: |
+          docker build -t ${{ env.ECR_URL }}:latest -t ${{ env.ECR_URL }}:${{ env.SHORT_SHA }} -f Dockerfile .
+          docker push ${{ env.ECR_URL }}:latest
+          docker push ${{ env.ECR_URL }}:${{ env.SHORT_SHA }}
+          
+          echo "✅ Server image pushed: ${{ env.ECR_URL }}:${{ env.SHORT_SHA }}"
+
+      - name: Restart App Runner Service
+        run: |
+          # Get App Runner service ARN
+          SERVICE_ARN=$(aws apprunner list-services --query "ServiceSummaryList[?ServiceName=='nlw20-app-runner-service'].ServiceArn | [0]" --output text)
+          
+          if [ "$SERVICE_ARN" != "None" ] && [ -n "$SERVICE_ARN" ]; then
+            echo "🔄 Restarting App Runner service..."
+            aws apprunner start-deployment --service-arn "$SERVICE_ARN"
+            echo "✅ App Runner deployment started"
+          else
+            echo "⚠️ App Runner service not found. It may need to be deployed first."
+          fi
+
+  deploy_web:
+    name: "Deploy Web Changes"
+    needs: detect_changes
+    if: ${{ needs.detect_changes.outputs.web_changed == 'true' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: web/package-lock.json
+
+      - name: Install Dependencies
+        working-directory: web
+        run: npm ci
+
+      - name: Build Next.js Application
+        working-directory: web
+        run: |
+          npm run build
+          echo "✅ Web application built successfully"
+
+      # TODO: Add deployment steps for web
+      # Options:
+      # 1. Deploy to S3 + CloudFront
+      # 2. Deploy to Amplify
+      # 3. Deploy to Vercel
+      # 4. Deploy as second App Runner service
+
+      - name: Web Deployment Placeholder
+        run: |
+          echo "🌐 Web deployment not yet configured"
+          echo "Built assets are ready in web/.next/"
+          echo "Configure deployment target in this workflow"
+
+  deployment_summary:
+    name: "Deployment Summary"
+    needs: [detect_changes, deploy_infrastructure, deploy_server, deploy_web]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Generate Summary
+        run: |
+          echo "## Deployment Summary 📊" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          echo "### Changed Components:" >> $GITHUB_STEP_SUMMARY
+          if [[ "${{ needs.detect_changes.outputs.infra_changed }}" == "true" ]]; then
+            echo "- 🏗️ **Infrastructure**: Changes detected and deployed" >> $GITHUB_STEP_SUMMARY
+          fi
+          if [[ "${{ needs.detect_changes.outputs.server_changed }}" == "true" ]]; then
+            echo "- 🖥️ **Server**: Changes detected and deployed" >> $GITHUB_STEP_SUMMARY
+          fi
+          if [[ "${{ needs.detect_changes.outputs.web_changed }}" == "true" ]]; then
+            echo "- 🌐 **Web**: Changes detected (deployment pending configuration)" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Deployment Status:" >> $GITHUB_STEP_SUMMARY
+          
+          # Check job statuses
+          if [[ "${{ needs.deploy_infrastructure.result }}" == "success" ]]; then
+            echo "- ✅ Infrastructure deployment successful" >> $GITHUB_STEP_SUMMARY
+          elif [[ "${{ needs.deploy_infrastructure.result }}" == "failure" ]]; then
+            echo "- ❌ Infrastructure deployment failed" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          if [[ "${{ needs.deploy_server.result }}" == "success" ]]; then
+            echo "- ✅ Server deployment successful" >> $GITHUB_STEP_SUMMARY
+          elif [[ "${{ needs.deploy_server.result }}" == "failure" ]]; then
+            echo "- ❌ Server deployment failed" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          if [[ "${{ needs.deploy_web.result }}" == "success" ]]; then
+            echo "- ✅ Web build successful" >> $GITHUB_STEP_SUMMARY
+          elif [[ "${{ needs.deploy_web.result }}" == "failure" ]]; then
+            echo "- ❌ Web build failed" >> $GITHUB_STEP_SUMMARY
+          fi
