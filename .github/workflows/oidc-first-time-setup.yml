@@ -1,0 +1,142 @@
+name: "OIDC First Time Setup"
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm_setup:
+        description: 'Type "SETUP" to confirm OIDC initial deployment'
+        required: true
+        type: string
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  validate_confirmation:
+    name: "Validate Setup Confirmation"
+    runs-on: ubuntu-latest
+    outputs:
+      confirmed: ${{ steps.validate.outputs.confirmed }}
+    steps:
+      - name: Validate Confirmation
+        id: validate
+        run: |
+          if [[ "${{ github.event.inputs.confirm_setup }}" == "SETUP" ]]; then
+            echo "confirmed=true" >> $GITHUB_OUTPUT
+            echo "✅ OIDC setup confirmed. Proceeding with initial deployment..."
+          else
+            echo "confirmed=false" >> $GITHUB_OUTPUT
+            echo "❌ Confirmation failed. You must type 'SETUP' to proceed."
+            exit 1
+          fi
+
+  setup_oidc:
+    name: "Setup OIDC Infrastructure"
+    runs-on: ubuntu-latest
+    needs: validate_confirmation
+    if: ${{ needs.validate_confirmation.outputs.confirmed == 'true' }}
+    outputs:
+      oidc_role_arn: ${{ steps.tf_outputs.outputs.oidc_role_arn }}
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Create secrets files
+        run: |
+          # Create .initial_secrets file with temporary AWS credentials
+          echo "${{ secrets.INITIAL_SECRETS_B64 }}" | base64 -d > .initial_secrets
+          chmod 600 .initial_secrets
+          
+          # Create .secrets file with project configuration
+          echo "${{ secrets.SECRETS_B64 }}" | base64 -d > .secrets
+          chmod 600 .secrets
+
+      - name: Load Initial Environment Variables
+        run: |
+          # Load temporary AWS credentials from .initial_secrets
+          export $(cat .initial_secrets | xargs)
+          echo "AWS_ACCESS_KEY_ID=${TEMP_AWS_ACCESS_KEY_ID}" >> $GITHUB_ENV
+          echo "AWS_SECRET_ACCESS_KEY=${TEMP_AWS_SECRET_ACCESS_KEY}" >> $GITHUB_ENV
+          
+          # Load project configuration from .secrets
+          export $(cat .secrets | xargs)
+          echo "AWS_REGION=${AWS_REGION}" >> $GITHUB_ENV
+          echo "TF_VAR_PREFIX=${TF_VAR_PREFIX}" >> $GITHUB_ENV
+          echo "GITHUB_ORG=${GITHUB_ORG}" >> $GITHUB_ENV
+          echo "GITHUB_REPO=${GITHUB_REPO}" >> $GITHUB_ENV
+          
+          # Create terraform.tfvars for OIDC setup
+          cat <<EOF > infra/1-oidc/terraform.tfvars
+          prefix = "${TF_VAR_PREFIX}"
+          github_org = "${GITHUB_ORG}"
+          github_repo = "${GITHUB_REPO}"
+          aws_region = "${AWS_REGION}"
+          aws_account_id = "${AWS_ACCOUNT_ID}"
+          EOF
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.6.0"
+
+      - name: Configure AWS Credentials (Temporary)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ env.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ env.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Terraform Init & Apply (OIDC)
+        working-directory: infra/1-oidc
+        run: |
+          terraform init -reconfigure
+          terraform plan -var-file=terraform.tfvars
+          terraform apply -auto-approve -var-file=terraform.tfvars
+
+      - name: Retrieve OIDC Outputs
+        id: tf_outputs
+        working-directory: infra/1-oidc
+        run: |
+          OIDC_ROLE_ARN=$(terraform output -raw github_role_arn)
+          echo "oidc_role_arn=${OIDC_ROLE_ARN}" >> $GITHUB_OUTPUT
+          echo "OIDC_ROLE_ARN=${OIDC_ROLE_ARN}" >> $GITHUB_ENV
+
+      - name: Test OIDC Authentication
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ steps.tf_outputs.outputs.oidc_role_arn }}
+          aws-region: ${{ env.AWS_REGION }}
+          role-session-name: GitHubActions-OIDCTest
+
+      - name: Verify OIDC Setup
+        run: |
+          echo "🧪 Testing OIDC authentication..."
+          aws sts get-caller-identity
+          echo "✅ OIDC setup successful!"
+
+  setup_summary:
+    name: "OIDC Setup Summary"
+    runs-on: ubuntu-latest
+    needs: setup_oidc
+    steps:
+      - name: Generate Setup Summary
+        run: |
+          echo "## 🎉 OIDC Setup Complete!" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### ✅ What was created:" >> $GITHUB_STEP_SUMMARY
+          echo "- GitHub OIDC Provider in AWS" >> $GITHUB_STEP_SUMMARY
+          echo "- GitHub Deployment Role with necessary permissions" >> $GITHUB_STEP_SUMMARY
+          echo "- Trust relationship between GitHub Actions and AWS" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 🔑 GitHub Role ARN:" >> $GITHUB_STEP_SUMMARY
+          echo "\`${{ needs.setup_oidc.outputs.oidc_role_arn }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 🧹 Critical Next Steps:" >> $GITHUB_STEP_SUMMARY
+          echo "1. **DELETE the temporary AWS user** from AWS Console" >> $GITHUB_STEP_SUMMARY
+          echo "2. **DELETE the \`INITIAL_SECRETS_B64\` secret** from GitHub repository settings" >> $GITHUB_STEP_SUMMARY
+          echo "3. **Keep only \`SECRETS_B64\`** for future deployments" >> $GITHUB_STEP_SUMMARY
+          echo "4. **Delete local .initial_secrets file**: \`rm .initial_secrets\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 🚀 Ready for OIDC Deployments!" >> $GITHUB_STEP_SUMMARY
+          echo "You can now use the \`deploy-with-oidc.yml\` workflow for secure, credential-free deployments." >> $GITHUB_STEP_SUMMARY

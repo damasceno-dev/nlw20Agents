@@ -1,6 +1,10 @@
 # Secrets and sensitive files
-.secrets*
-!.secrets*.example
+.secrets
+.secrets.b64
+!.secrets.example
+.initial_secrets
+.initial_secrets.b64
+!.initial_secrets.example
 appsettings.Production.json
 appsettings.Development.json
 *.tfvars
