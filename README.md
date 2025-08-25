@@ -14,10 +14,9 @@ nlw20Agents/
 │       └── deploy-on-change.yml         # Smart component deployment
 ├── infra/
 │   ├── 1-oidc/                         # GitHub OIDC setup
-│   ├── 1-admin/                        # IAM users and policies (legacy)
 │   ├── 2-resources/                    # VPC, Aurora, ECR
 │   └── 3-apprunner/                    # App Runner service
-├── server/                             # .NET 8 Backend API
+├── server/                             # .NET 9 Backend API
 ├── web/                               # Next.js Frontend
 ├── .initial_secrets.example           # Temporary AWS credentials
 ├── .secrets.example                   # Project configuration
@@ -183,6 +182,10 @@ The workflow will:
 
 4. **Keep only SECRETS_B64** in GitHub for all future deployments
 
+## 💰 Costs and Budget
+
+For an estimate of monthly AWS costs for this setup and ways to keep costs below ~$100/month, see COSTS.md. In short: with App Runner (1 vCPU/2GB) and Aurora Serverless v2 (min 0.5 ACU) running, expect around $100+/month baseline. Use the "Destroy with OIDC" workflow to tear down when not in use.
+
 ## 🏗️ Deployment Workflows
 
 After OIDC setup, you have three deployment options:
@@ -220,21 +223,21 @@ Destroys in proper order: App Runner → Resources → Admin → OIDC
 
 ### AWS Services Deployed
 
-| Service | Configuration | Purpose |
-|---------|--------------|---------|
-| **GitHub OIDC Provider** | Trust relationship with GitHub | Secure authentication |
-| **Aurora Serverless v2** | 0.5-1 ACU, PostgreSQL | Application database |
-| **App Runner** | 0.25 vCPU, 0.5 GB RAM | .NET API hosting |
-| **ECR** | Private repository | Docker image storage |
-| **VPC** | 2 public + 2 private subnets | Network isolation |
-| **NAT Gateway** | Single AZ | Private subnet internet access |
+| Service                  | Configuration                  | Purpose                        |
+|--------------------------|--------------------------------|--------------------------------|
+| **GitHub OIDC Provider** | Trust relationship with GitHub | Secure authentication          |
+| **Aurora Serverless v2** | 0.5-1 ACU, PostgreSQL          | Application database           |
+| **App Runner**           | 0.25 vCPU, 0.5 GB RAM          | .NET API hosting               |
+| **ECR**                  | Private repository             | Docker image storage           |
+| **VPC**                  | 2 public + 2 private subnets   | Network isolation              |
+| **NAT Gateway**          | Single AZ                      | Private subnet internet access |
 
 ### Monthly Cost Estimates (US East 1)
 
-| Usage Level | Estimated Cost | Notes |
-|-------------|----------------|-------|
-| **Development** | ~$50-70/month | Single instance, minimal traffic |
-| **Production (Light)** | ~$105/month | Standard configuration |
+| Usage Level            | Estimated Cost  | Notes                            |
+|------------------------|-----------------|----------------------------------|
+| **Development**        | ~$50-70/month   | Single instance, minimal traffic |
+| **Production (Light)** | ~$105/month     | Standard configuration           |
 | **Production (Heavy)** | ~$150-220/month | High traffic, multiple instances |
 
 ### Cost Optimization Tips
@@ -247,7 +250,7 @@ Destroys in proper order: App Runner → Resources → Admin → OIDC
 
 ### Local Development Setup
 
-**Backend (.NET 8)**
+**Backend (.NET 9)**
 ```bash
 cd server
 dotnet restore
@@ -411,7 +414,6 @@ infra/
 │   ├── outputs.tf       # GitHub role ARN
 │   └── modules/
 │       └── iam-policies/  # Least-privilege policies
-├── 1-admin/             # Legacy IAM setup (optional)
 ├── 2-resources/         # Core infrastructure
 │   ├── main.tf          # VPC, Aurora, ECR
 │   └── modules/
