@@ -58,10 +58,10 @@ Follow these steps to set up your full-stack project with secure OIDC authentica
 # Still in AWS Console as root:
 # IAM → Users → Create user
 # User name: temp-setup-{prefix}-{YYYYMMDD}
-# Example: temp-setup-agents-20241215
+# Example: temp-setup-agents-20250826
 # Attach policy: AdministratorAccess (AWS managed policy)
 # Security credentials → Create access key → CLI
-# ⚠️ Save these credentials - you'll delete this user in 30 minutes!
+# ⚠️ Save these credentials in .initial_secrets file - you'll delete this user in 30 minutes!
 ```
 
 ### Step 2: Local Configuration
@@ -109,6 +109,10 @@ TF_VAR_PREFIX=agents
 TF_VAR_DB_PASSWORD=your-secure-password-here
 DB_NAME=agents
 DB_USERNAME=postgres
+
+# Application Configuration
+OPENAI_API_KEY=your-open-api-key
+
 ```
 
 **2.5 Prepare GitHub Secrets**
@@ -127,7 +131,7 @@ This creates two base64-encoded files:
 **3.1 Push Code to GitHub**
 ```bash
 git add .
-git commit -m "feat: add OIDC workflows and configuration"
+git commit -m "feat: add OIDC workflows and initial configuration"
 git push origin main
 ```
 
