@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       confirm_destroy:
-        description: 'Type "DESTROY-ROLE" to confirm deletion of this project\'s OIDC role'
+        description: 'Type "DESTROY-ROLE" to confirm deletion of this projects OIDC role'
         required: true
         type: string
       keep_oidc_provider:
