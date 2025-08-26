@@ -235,7 +235,9 @@ For an estimate of monthly AWS costs for this setup and ways to keep costs below
 
 ## 🏗️ Deployment Workflows
 
-After OIDC setup, you have three deployment options:
+After OIDC setup, you have three **manual deployment** options:
+
+> 🎯 **All workflows are manual-only** - No automatic deployments occur. You have full control over when and what gets deployed.
 
 ### Option 1: Full Deployment (Manual)
 ```bash
@@ -246,12 +248,13 @@ After OIDC setup, you have three deployment options:
 # ✅ Deploy App Runner
 ```
 
-### Option 2: Smart Deployment (Automatic)
-The `deploy-on-change.yml` workflow automatically detects which components changed and deploys only those:
+### Option 2: Smart Deployment (Manual with Change Detection)
+The `deploy-on-change.yml` workflow can be manually triggered and automatically detects which components changed since the last deployment:
 
-- **Infrastructure changes** (`infra/**`) → Triggers full infrastructure deployment
+- **Infrastructure changes** (`infra/**`) → Deploys infrastructure components
 - **Server changes** (`server/**`) → Builds and pushes new Docker image, restarts App Runner
 - **Web changes** (`web/**`) → Builds frontend (deployment target configurable)
+- **Force deploy all** → Option to deploy all components regardless of changes
 
 ### Option 3: Component-Specific Deployment
 Use workflow dispatch with specific components selected for targeted deployments.

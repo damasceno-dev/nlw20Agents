@@ -1,14 +1,13 @@
 name: "Deploy on Component Change"
 
 on:
-  push:
-    branches:
-      - main
-    paths:
-      - 'infra/**'
-      - 'server/**'
-      - 'web/**'
-      - '.github/workflows/deploy-on-change.yml'
+  workflow_dispatch:
+    inputs:
+      force_deploy_all:
+        description: 'Force deploy all components (ignore change detection)'
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   id-token: write
