@@ -10,7 +10,8 @@ nlw20Agents/
 │   └── workflows/
 │       ├── oidc-first-time-setup.yml   # One-time OIDC setup
 │       ├── deploy-with-oidc.yml         # Main deployment workflow
-│       ├── destroy-with-oidc.yml        # Infrastructure teardown
+│       ├── destroy-full-stack.yml      # Complete infrastructure teardown
+│       ├── cleanup-oidc-role.yml       # Project-specific OIDC cleanup
 │       └── deploy-on-change.yml         # Smart component deployment
 ├── infra/
 │   ├── 1-oidc/                         # GitHub OIDC setup
@@ -186,8 +187,8 @@ This setup is designed for **per-project isolation** with shared OIDC infrastruc
 ### ♻️ Cleanup Per Project:
 Each project can be completely destroyed independently without affecting others.
 
-**To destroy OIDC role for this project:**
-1. Go to **Actions** → **"Destroy OIDC Role (Project-Specific)"**
+**To cleanup OIDC role for this project:**
+1. Go to **Actions** → **"Cleanup OIDC Role"**
 2. Type `DESTROY-ROLE` to confirm
 3. Choose whether to keep the shared OIDC provider (recommended if other projects use it)
 4. Manually delete the S3 bucket: `{prefix}-terraform-state-unique1029`
@@ -259,7 +260,7 @@ Use workflow dispatch with specific components selected for targeted deployments
 
 To destroy all AWS resources:
 
-1. **GitHub Actions** → **"Destroy with OIDC"**
+1. **GitHub Actions** → **"Destroy Full Stack"**
 2. Type `DESTROY` to confirm
 3. Wait for completion (~10 minutes)
 

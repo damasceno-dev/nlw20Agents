@@ -1,4 +1,4 @@
-name: "Destroy with OIDC"
+name: "Destroy Full Stack"
 
 on:
   workflow_dispatch:

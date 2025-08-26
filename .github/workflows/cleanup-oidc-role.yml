@@ -1,4 +1,4 @@
-name: "Destroy OIDC Role (Project-Specific)"
+name: "Cleanup OIDC Role"
 
 on:
   workflow_dispatch:
