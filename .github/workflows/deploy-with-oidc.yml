@@ -27,12 +27,12 @@ jobs:
   # ==========================================
   # STAGE 1: Infrastructure Deployment
   # ==========================================
-  deploy_admin:
-    name: "Deploy Admin Infrastructure"
+  get_oidc_credentials:
+    name: "Setup OIDC Credentials"
     runs-on: ubuntu-latest
     if: ${{ github.event.inputs.deploy_infra != 'false' }}
     outputs:
-      admin_complete: ${{ steps.completion.outputs.done }}
+      credentials_ready: ${{ steps.completion.outputs.done }}
       oidc_role_arn: ${{ steps.get_oidc_role.outputs.role_arn }}
     steps:
       - name: Checkout Repository
@@ -43,45 +43,58 @@ jobs:
           echo "${{ secrets.SECRETS_B64 }}" | base64 -d > .secrets
           chmod 600 .secrets
 
-      - name: Load Environment Variables and Create tfvars
+      - name: Load Environment Variables
         run: |
           export $(grep -v '^#' .secrets | grep -v '^$' | xargs)
           echo "AWS_REGION=${AWS_REGION}" >> $GITHUB_ENV
           echo "TF_VAR_PREFIX=${TF_VAR_PREFIX}" >> $GITHUB_ENV
           echo "GITHUB_ORG=${GITHUB_ORG}" >> $GITHUB_ENV
           echo "GITHUB_REPO=${GITHUB_REPO}" >> $GITHUB_ENV
-          
-          cat <<EOF > infra/1-admin/terraform.tfvars
-          prefix = "${TF_VAR_PREFIX}"
-          resources_creator_profile = "resources-creator"
-          EOF
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: "1.6.0"
 
+      - name: Configure Terraform Backend for OIDC
+        working-directory: infra/1-oidc
+        run: |
+          # Configure S3 backend for Terraform state
+          cat <<EOF > backend.tf
+          terraform {
+            backend "s3" {
+              bucket = "${TF_VAR_PREFIX}-terraform-state-unique1029"
+              key    = "oidc/terraform.tfstate"
+              region = "${AWS_REGION}"
+            }
+          }
+          EOF
+        env:
+          TF_VAR_PREFIX: ${{ env.TF_VAR_PREFIX }}
+          AWS_REGION: ${{ env.AWS_REGION }}
+
       - name: Get OIDC Role ARN
         id: get_oidc_role
         working-directory: infra/1-oidc
         run: |
           terraform init -reconfigure
-          OIDC_ROLE_ARN=$(terraform output -raw github_role_arn)
+          OIDC_ROLE_ARN=$(terraform output -raw github_deploy_role_arn)
           echo "role_arn=${OIDC_ROLE_ARN}" >> $GITHUB_OUTPUT
           echo "OIDC_ROLE_ARN=${OIDC_ROLE_ARN}" >> $GITHUB_ENV
+          echo "✅ Retrieved OIDC Role ARN: ${OIDC_ROLE_ARN}"
 
-      - name: Configure AWS Credentials (OIDC)
+      - name: Test OIDC Authentication
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ steps.get_oidc_role.outputs.role_arn }}
           aws-region: ${{ env.AWS_REGION }}
-          role-session-name: GitHubActions-DeployAdmin
+          role-session-name: GitHubActions-DeployTest
 
-      - name: Terraform Init & Apply (Admin)
-        working-directory: infra/1-admin
+      - name: Verify AWS Access
         run: |
-          terraform init -reconfigure
-          terraform apply -auto-approve -var-file=terraform.tfvars
+          echo "🧪 Testing AWS access with OIDC credentials..."
+          aws sts get-caller-identity
+          echo "✅ OIDC credentials working!"
 
       - name: Mark Completion
         id: completion
@@ -90,7 +103,7 @@ jobs:
   deploy_resources:
     name: "Deploy AWS Resources"
     runs-on: ubuntu-latest
-    needs: deploy_admin
+    needs: get_oidc_credentials
     if: ${{ github.event.inputs.deploy_infra != 'false' }}
     outputs:
       aurora_endpoint: ${{ steps.tf_outputs.outputs.aurora_endpoint }}
@@ -124,7 +137,7 @@ jobs:
       - name: Configure AWS Credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: ${{ needs.deploy_admin.outputs.oidc_role_arn }}
+          role-to-assume: ${{ needs.get_oidc_credentials.outputs.oidc_role_arn }}
           aws-region: ${{ env.AWS_REGION }}
           role-session-name: GitHubActions-DeployResources
 
@@ -156,7 +169,7 @@ jobs:
   deploy_server:
     name: "Build and Deploy Server to ECR"
     runs-on: ubuntu-latest
-    needs: [deploy_admin, deploy_resources]
+    needs: [get_oidc_credentials, deploy_resources]
     if: ${{ github.event.inputs.deploy_server != 'false' }}
     steps:
       - name: Checkout Repository
@@ -217,7 +230,7 @@ jobs:
       - name: Configure AWS Credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: ${{ needs.deploy_admin.outputs.oidc_role_arn }}
+          role-to-assume: ${{ needs.get_oidc_credentials.outputs.oidc_role_arn }}
           aws-region: ${{ env.AWS_REGION }}
           role-session-name: GitHubActions-DeployServer
 
@@ -250,7 +263,7 @@ jobs:
   deploy_app_runner:
     name: "Deploy App Runner"
     runs-on: ubuntu-latest
-    needs: [deploy_admin, deploy_resources, deploy_server]
+    needs: [get_oidc_credentials, deploy_resources, deploy_server]
     if: ${{ github.event.inputs.deploy_app_runner != 'false' }}
     steps:
       - name: Checkout Repository
@@ -274,7 +287,7 @@ jobs:
       - name: Configure AWS Credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: ${{ needs.deploy_admin.outputs.oidc_role_arn }}
+          role-to-assume: ${{ needs.get_oidc_credentials.outputs.oidc_role_arn }}
           aws-region: ${{ env.AWS_REGION }}
           role-session-name: GitHubActions-DeployAppRunner
 
