@@ -42,7 +42,7 @@ jobs:
 
       - name: Load Environment Variables
         run: |
-          export $(cat .secrets | xargs)
+          export $(grep -v '^#' .secrets | grep -v '^$' | xargs)
           echo "AWS_REGION=${AWS_REGION}" >> $GITHUB_ENV
 
       - name: Setup Terraform
@@ -75,7 +75,7 @@ jobs:
 
       - name: Load Environment Variables
         run: |
-          export $(cat .secrets | xargs)
+          export $(grep -v '^#' .secrets | grep -v '^$' | xargs)
           echo "AWS_REGION=${AWS_REGION}" >> $GITHUB_ENV
 
       - name: Setup Terraform
@@ -111,7 +111,7 @@ jobs:
 
       - name: Load Environment Variables
         run: |
-          export $(cat .secrets | xargs)
+          export $(grep -v '^#' .secrets | grep -v '^$' | xargs)
           echo "AWS_REGION=${AWS_REGION}" >> $GITHUB_ENV
           echo "TF_VAR_DB_PASSWORD=${TF_VAR_DB_PASSWORD}" >> $GITHUB_ENV
           
@@ -156,7 +156,7 @@ jobs:
 
       - name: Load Environment Variables
         run: |
-          export $(cat .secrets | xargs)
+          export $(grep -v '^#' .secrets | grep -v '^$' | xargs)
           echo "AWS_REGION=${AWS_REGION}" >> $GITHUB_ENV
           echo "TF_VAR_PREFIX=${TF_VAR_PREFIX}" >> $GITHUB_ENV
           
@@ -198,7 +198,7 @@ jobs:
 
       - name: Load Environment Variables
         run: |
-          export $(cat .secrets | xargs)
+          export $(grep -v '^#' .secrets | grep -v '^$' | xargs)
           echo "AWS_REGION=${AWS_REGION}" >> $GITHUB_ENV
           echo "TF_VAR_PREFIX=${TF_VAR_PREFIX}" >> $GITHUB_ENV
 
@@ -286,7 +286,7 @@ jobs:
 
       - name: Load Environment Variables
         run: |
-          export $(cat .secrets | xargs)
+          export $(grep -v '^#' .secrets | grep -v '^$' | xargs)
           echo "AWS_REGION=${AWS_REGION}" >> $GITHUB_ENV
           echo "TF_VAR_PREFIX=${TF_VAR_PREFIX}" >> $GITHUB_ENV
           echo "GITHUB_ORG=${GITHUB_ORG}" >> $GITHUB_ENV

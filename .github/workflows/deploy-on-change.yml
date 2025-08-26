@@ -65,7 +65,7 @@ jobs:
 
       - name: Load Environment Variables
         run: |
-          export $(cat .secrets | xargs)
+          export $(grep -v '^#' .secrets | grep -v '^$' | xargs)
           echo "AWS_REGION=${AWS_REGION}" >> $GITHUB_ENV
 
       - name: Setup Terraform
@@ -128,7 +128,7 @@ jobs:
 
       - name: Load Environment Variables
         run: |
-          export $(cat .secrets | xargs)
+          export $(grep -v '^#' .secrets | grep -v '^$' | xargs)
           echo "AWS_REGION=${AWS_REGION}" >> $GITHUB_ENV
 
       - name: Setup Terraform to Get Outputs
@@ -161,7 +161,7 @@ jobs:
 
       - name: Generate appsettings.Production.json
         run: |
-          export $(cat .secrets | xargs)
+          export $(grep -v '^#' .secrets | grep -v '^$' | xargs)
           
           cat <<EOF > server/server.API/appsettings.Production.json
           {

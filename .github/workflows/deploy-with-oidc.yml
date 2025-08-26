@@ -45,7 +45,7 @@ jobs:
 
       - name: Load Environment Variables and Create tfvars
         run: |
-          export $(cat .secrets | xargs)
+          export $(grep -v '^#' .secrets | grep -v '^$' | xargs)
           echo "AWS_REGION=${AWS_REGION}" >> $GITHUB_ENV
           echo "TF_VAR_PREFIX=${TF_VAR_PREFIX}" >> $GITHUB_ENV
           echo "GITHUB_ORG=${GITHUB_ORG}" >> $GITHUB_ENV
@@ -106,7 +106,7 @@ jobs:
 
       - name: Load Resources Creator Environment Variables
         run: |
-          export $(cat .secrets | xargs)
+          export $(grep -v '^#' .secrets | grep -v '^$' | xargs)
           echo "AWS_REGION=${AWS_REGION}" >> $GITHUB_ENV
           echo "TF_VAR_DB_PASSWORD=${TF_VAR_DB_PASSWORD}" >> $GITHUB_ENV
           
@@ -170,7 +170,7 @@ jobs:
       - name: Generate appsettings.Production.json
         run: |
           # Load environment variables
-          export $(cat .secrets | xargs)
+          export $(grep -v '^#' .secrets | grep -v '^$' | xargs)
           
           # Get infrastructure outputs from previous job
           AURORA_ENDPOINT="${{ needs.deploy_resources.outputs.aurora_endpoint }}"
@@ -263,7 +263,7 @@ jobs:
 
       - name: Load Environment Variables
         run: |
-          export $(cat .secrets | xargs)
+          export $(grep -v '^#' .secrets | grep -v '^$' | xargs)
           echo "AWS_REGION=${AWS_REGION}" >> $GITHUB_ENV
 
       - name: Setup Terraform
