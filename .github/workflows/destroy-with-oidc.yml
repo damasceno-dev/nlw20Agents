@@ -183,10 +183,98 @@ jobs:
           terraform init -reconfigure
           terraform destroy -auto-approve -var-file=terraform.tfvars
 
+  cleanup_prerequisites:
+    name: "Cleanup Prerequisites (S3 State Bucket & Temp IAM Users)"
+    runs-on: ubuntu-latest
+    needs: [validate_confirmation, destroy_admin]
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Create .secrets file
+        run: |
+          echo "${{ secrets.SECRETS_B64 }}" | base64 -d > .secrets
+          chmod 600 .secrets
+
+      - name: Load Environment Variables
+        run: |
+          export $(cat .secrets | xargs)
+          echo "AWS_REGION=${AWS_REGION}" >> $GITHUB_ENV
+          echo "TF_VAR_PREFIX=${TF_VAR_PREFIX}" >> $GITHUB_ENV
+
+      - name: Configure AWS Credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ needs.validate_confirmation.outputs.oidc_role_arn }}
+          aws-region: ${{ env.AWS_REGION }}
+          role-session-name: GitHubActions-CleanupPrereqs
+
+      - name: Delete S3 Terraform State Bucket(s) if exist
+        env:
+          PREFIX: ${{ env.TF_VAR_PREFIX }}
+        run: |
+          set -euo pipefail
+          echo "Looking for S3 buckets starting with: ${PREFIX}-terraform-state-"
+          BUCKETS=$(aws s3api list-buckets --query "Buckets[?starts_with(Name, \`${PREFIX}-terraform-state-\`)].Name" --output text || true)
+          if [ -z "$BUCKETS" ]; then
+            echo "No matching state buckets found."
+          else
+            for B in $BUCKETS; do
+              echo "Deleting bucket: $B (force, will remove all objects and versions)"
+              # Ensure bucket is in our region; if not, still attempt deletion (S3 is global but location matters for some APIs)
+              aws s3 rb s3://$B --force || echo "Warning: failed to delete $B (may not exist or already deleted)"
+            done
+          fi
+
+      - name: Delete temporary IAM users if exist
+        env:
+          PREFIX: ${{ env.TF_VAR_PREFIX }}
+        run: |
+          set -euo pipefail
+          echo "Looking for IAM users starting with: temp-setup-${PREFIX}-"
+          USERS=$(aws iam list-users --query "Users[?starts_with(UserName, \`temp-setup-${PREFIX}-\`)].UserName" --output text || true)
+          if [ -z "$USERS" ]; then
+            echo "No matching temp setup users found."
+          else
+            for U in $USERS; do
+              echo "Cleaning up IAM user: $U"
+              # Delete access keys
+              KEYS=$(aws iam list-access-keys --user-name "$U" --query 'AccessKeyMetadata[].AccessKeyId' --output text || true)
+              for K in $KEYS; do
+                echo "- Deleting access key $K"
+                aws iam delete-access-key --user-name "$U" --access-key-id "$K" || true
+              done
+              # Detach managed policies
+              POLS=$(aws iam list-attached-user-policies --user-name "$U" --query 'AttachedPolicies[].PolicyArn' --output text || true)
+              for P in $POLS; do
+                echo "- Detaching policy $P"
+                aws iam detach-user-policy --user-name "$U" --policy-arn "$P" || true
+              done
+              # Remove inline policies
+              INLINES=$(aws iam list-user-policies --user-name "$U" --query 'PolicyNames[]' --output text || true)
+              for IP in $INLINES; do
+                echo "- Deleting inline policy $IP"
+                aws iam delete-user-policy --user-name "$U" --policy-name "$IP" || true
+              done
+              # Remove from groups
+              GROUPS=$(aws iam list-groups-for-user --user-name "$U" --query 'Groups[].GroupName' --output text || true)
+              for G in $GROUPS; do
+                echo "- Removing from group $G"
+                aws iam remove-user-from-group --user-name "$U" --group-name "$G" || true
+              done
+              # Delete login profile if exists
+              echo "- Deleting login profile (if any)"
+              aws iam delete-login-profile --user-name "$U" || true
+              # Finally delete the user
+              echo "- Deleting user $U"
+              aws iam delete-user --user-name "$U" || true
+            done
+          fi
+
   destroy_oidc:
     name: "Destroy OIDC Infrastructure"
     runs-on: ubuntu-latest
-    needs: [validate_confirmation, destroy_admin]
+    needs: [validate_confirmation, destroy_admin, cleanup_prerequisites]
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
@@ -247,6 +335,8 @@ jobs:
           echo "- ECR Repository" >> $GITHUB_STEP_SUMMARY
           echo "- IAM Roles and Policies" >> $GITHUB_STEP_SUMMARY
           echo "- OIDC Provider & GitHub Role" >> $GITHUB_STEP_SUMMARY
+          echo "- Terraform State S3 Bucket(s) (if any)" >> $GITHUB_STEP_SUMMARY
+          echo "- Temporary IAM setup user(s) (if any)" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### 🔐 Security Benefits Used:" >> $GITHUB_STEP_SUMMARY
           echo "- No AWS credentials stored in GitHub" >> $GITHUB_STEP_SUMMARY
