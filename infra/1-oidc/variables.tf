@@ -62,3 +62,19 @@ variable "aws_account_id" {
   type        = string
   default     = ""
 }
+
+# ========================================
+# OIDC DETECTION VARIABLES
+# ========================================
+
+variable "oidc_provider_exists" {
+  description = "Whether OIDC provider already exists in the AWS account"
+  type        = bool
+  default     = false
+}
+
+variable "existing_oidc_provider_arn" {
+  description = "ARN of existing OIDC provider (if it exists)"
+  type        = string
+  default     = ""
+}

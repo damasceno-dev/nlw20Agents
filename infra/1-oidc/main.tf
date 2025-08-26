@@ -36,14 +36,8 @@ terraform {
     }
   }
 
-  backend "s3" {
-    bucket  = "agents-terraform-state-unique1029"  # Must match bucket from Step 1
-    key     = "1-oidc/terraform.tfstate"
-    region  = "us-east-1"
-    encrypt = true
-    # Optional: Add DynamoDB table for state locking
-    # dynamodb_table = "agents-terraform-locks"
-  }
+  # Backend configuration is dynamically created by the workflow
+  # See .github/workflows/oidc-first-time-setup.yml
 }
 
 provider "aws" {
@@ -63,8 +57,11 @@ provider "aws" {
 # DATA SOURCES
 # ========================================
 
-# Check if OIDC provider already exists
-data "aws_iam_openid_connect_providers" "existing" {}
+# Get existing OIDC provider if it exists (passed from workflow)
+data "aws_iam_openid_connect_provider" "github_existing" {
+  count = var.oidc_provider_exists ? 1 : 0
+  arn   = var.existing_oidc_provider_arn
+}
 
 # Get current AWS account ID
 data "aws_caller_identity" "current" {}
@@ -77,8 +74,8 @@ locals {
   # Construct role name
   github_role_name = "${var.prefix}-github-deploy-role"
 
-  # Use the created OIDC provider ARN directly
-  oidc_provider_arn = aws_iam_openid_connect_provider.github.arn
+  # Use existing OIDC provider ARN if it exists, otherwise use the created one
+  oidc_provider_arn = var.oidc_provider_exists ? data.aws_iam_openid_connect_provider.github_existing[0].arn : aws_iam_openid_connect_provider.github[0].arn
 
   # Tags for all resources
   common_tags = {
@@ -94,8 +91,10 @@ locals {
 # GITHUB OIDC PROVIDER (SIMPLIFIED)
 # ========================================
 
-# Create OIDC provider - use import if it already exists
+# Create OIDC provider only if it doesn't exist
 resource "aws_iam_openid_connect_provider" "github" {
+  count = var.oidc_provider_exists ? 0 : 1
+
   url = "https://token.actions.githubusercontent.com"
 
   client_id_list = ["sts.amazonaws.com"]

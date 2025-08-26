@@ -150,10 +150,47 @@ git push origin main
 
 ### Step 4: OIDC Setup (One-Time per AWS account; per-repo role auto-created)
 
-Note on idempotency and reuse:
-- The workflow auto-detects if the AWS account already has the GitHub OIDC provider configured. If it exists, it will NOT recreate it.
-- It also detects if the per-repo GitHub deploy role (named `{prefix}-github-deploy-role`) already exists. If it exists, it reuses it; otherwise it creates it.
-- This makes the workflow safe to rerun and easy to reuse in other repos within the same AWS account: the provider is one-time per account; the role is per-repo.
+## Project Isolation Strategy
+
+This setup is designed for **per-project isolation** with shared OIDC infrastructure:
+
+### 🔐 Per-Project Resources (Created Every Time):
+- ✅ **Separate S3 bucket per project** (`{prefix}-terraform-state-unique1029`)
+- ✅ **Separate GitHub Deploy Role** (`{prefix}-github-deploy-role`)
+- ✅ **Separate temporary AWS credentials** (deleted after setup)
+- ✅ **Independent Terraform state** per project
+
+### 🌐 Shared AWS Account Resources (One-Time):
+- ✅ **GitHub OIDC Provider** (created once, automatically detected and reused)
+
+### 🔍 Smart OIDC Detection:
+- **First Project**: Creates OIDC provider + project role
+- **Subsequent Projects**: Detects existing OIDC provider, skips creation, creates only project role
+- **Clear Logging**: Shows exactly what's being created vs reused
+
+### 🚀 Using This as a Template:
+
+**For Each New Project:**
+1. **Clone/Fork this repository**
+2. **Create project-specific AWS resources:**
+   - Create S3 bucket: `{new-prefix}-terraform-state-unique1029`
+   - Create temporary AWS user: `temp-setup-{new-prefix}-{YYYYMMDD}`
+3. **Update configuration files:**
+   - Update `.initial_secrets` with new temporary AWS user credentials
+   - Update `.secrets` file with new prefix (e.g., `TF_VAR_PREFIX=myapp`)
+4. **Prepare and add GitHub secrets:**
+   - Run `./prepare_secrets.sh` to encode files
+   - Add `INITIAL_SECRETS_B64` and `SECRETS_B64` to GitHub repository secrets
+5. **Run OIDC setup workflow** - it will detect existing OIDC and create only project resources
+
+### ♻️ Cleanup Per Project:
+Each project can be completely destroyed independently without affecting others.
+
+**To destroy OIDC role for this project:**
+1. Go to **Actions** → **"Destroy OIDC Role (Project-Specific)"**
+2. Type `DESTROY-ROLE` to confirm
+3. Choose whether to keep the shared OIDC provider (recommended if other projects use it)
+4. Manually delete the S3 bucket: `{prefix}-terraform-state-unique1029`
 
 **4.1 Run OIDC Setup Workflow**
 1. Go to **Actions** tab in your GitHub repository
