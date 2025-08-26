@@ -148,7 +148,12 @@ git push origin main
    - Name: `SECRETS_B64`  
    - Value: Paste entire content of `.secrets.b64`
 
-### Step 4: OIDC Setup (One-Time)
+### Step 4: OIDC Setup (One-Time per AWS account; per-repo role auto-created)
+
+Note on idempotency and reuse:
+- The workflow auto-detects if the AWS account already has the GitHub OIDC provider configured. If it exists, it will NOT recreate it.
+- It also detects if the per-repo GitHub deploy role (named `{prefix}-github-deploy-role`) already exists. If it exists, it reuses it; otherwise it creates it.
+- This makes the workflow safe to rerun and easy to reuse in other repos within the same AWS account: the provider is one-time per account; the role is per-repo.
 
 **4.1 Run OIDC Setup Workflow**
 1. Go to **Actions** tab in your GitHub repository
@@ -158,9 +163,9 @@ git push origin main
 5. Wait for completion (~5 minutes)
 
 **4.2 Verify OIDC Setup**
-The workflow will:
-- Create GitHub OIDC provider in AWS
-- Create GitHub deployment role with necessary permissions
+The workflow will (create if missing, or verify if existing):
+- GitHub OIDC provider in AWS (one-time per account)
+- GitHub deployment role for this repository (per repo)
 - Test OIDC authentication
 - Output the role ARN for verification
 

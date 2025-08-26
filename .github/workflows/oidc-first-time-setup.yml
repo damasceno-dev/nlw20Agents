@@ -37,7 +37,7 @@ jobs:
     needs: validate_confirmation
     if: ${{ needs.validate_confirmation.outputs.confirmed == 'true' }}
     outputs:
-      oidc_role_arn: ${{ steps.tf_outputs.outputs.oidc_role_arn }}
+      oidc_role_arn: ${{ steps.expose.outputs.oidc_role_arn }}
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
@@ -54,14 +54,15 @@ jobs:
 
       - name: Load Initial Environment Variables
         run: |
-          # Load temporary AWS credentials from .initial_secrets
-          export $(cat .initial_secrets | xargs)
+          # Load temporary AWS credentials from .initial_secrets (filter out comments and empty lines)
+          export $(grep -v '^#' .initial_secrets | grep -v '^$' | xargs)
           echo "AWS_ACCESS_KEY_ID=${TEMP_AWS_ACCESS_KEY_ID}" >> $GITHUB_ENV
           echo "AWS_SECRET_ACCESS_KEY=${TEMP_AWS_SECRET_ACCESS_KEY}" >> $GITHUB_ENV
           
-          # Load project configuration from .secrets
-          export $(cat .secrets | xargs)
+          # Load project configuration from .secrets (filter out comments and empty lines)
+          export $(grep -v '^#' .secrets | grep -v '^$' | xargs)
           echo "AWS_REGION=${AWS_REGION}" >> $GITHUB_ENV
+          echo "AWS_ACCOUNT_ID=${AWS_ACCOUNT_ID}" >> $GITHUB_ENV
           echo "TF_VAR_PREFIX=${TF_VAR_PREFIX}" >> $GITHUB_ENV
           echo "GITHUB_ORG=${GITHUB_ORG}" >> $GITHUB_ENV
           echo "GITHUB_REPO=${GITHUB_REPO}" >> $GITHUB_ENV
@@ -87,25 +88,111 @@ jobs:
           aws-secret-access-key: ${{ env.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
 
+      - name: Verify S3 Terraform State Bucket
+        run: |
+          BUCKET_NAME="${TF_VAR_PREFIX}-terraform-state-unique1029"
+          echo "🔍 Checking if S3 bucket exists: ${BUCKET_NAME}"
+          
+          if aws s3api head-bucket --bucket "${BUCKET_NAME}" 2>/dev/null; then
+            echo "✅ S3 bucket '${BUCKET_NAME}' exists and is accessible"
+          else
+            echo "❌ S3 bucket '${BUCKET_NAME}' does not exist or is not accessible"
+            echo "📖 Please create the bucket manually in AWS Console:"
+            echo "   - Name: ${BUCKET_NAME}"
+            echo "   - Region: ${AWS_REGION}"
+            echo "   - Versioning: ENABLED"
+            echo "   - Encryption: ENABLED (AES-256)"
+            echo "   - Block all public access: YES"
+            exit 1
+          fi
+        env:
+          TF_VAR_PREFIX: ${{ env.TF_VAR_PREFIX }}
+          AWS_REGION: ${{ env.AWS_REGION }}
+
+      - name: Configure Terraform Backend
+        working-directory: infra/1-oidc
+        run: |
+          # Configure S3 backend for Terraform state
+          cat <<EOF > backend.tf
+          terraform {
+            backend "s3" {
+              bucket = "${TF_VAR_PREFIX}-terraform-state-unique1029"
+              key    = "oidc/terraform.tfstate"
+              region = "${AWS_REGION}"
+            }
+          }
+          EOF
+        env:
+          TF_VAR_PREFIX: ${{ env.TF_VAR_PREFIX }}
+          AWS_REGION: ${{ env.AWS_REGION }}
+
+      - name: Detect existing OIDC provider and role
+        id: detect
+        run: |
+          set -euo pipefail
+          echo "🔎 Detecting existing OIDC provider and GitHub deploy role"
+
+          GITHUB_PROVIDER_ARN=$(aws iam list-open-id-connect-providers \
+            --query 'OpenIDConnectProviderList[?contains(Arn, `token.actions.githubusercontent.com`)].Arn' \
+            --output text || true)
+
+          if [ -n "${GITHUB_PROVIDER_ARN:-}" ] && [ "${GITHUB_PROVIDER_ARN}" != "None" ]; then
+            echo "provider_exists=true" >> $GITHUB_OUTPUT
+            echo "✅ Found OIDC provider: ${GITHUB_PROVIDER_ARN}"
+          else
+            echo "provider_exists=false" >> $GITHUB_OUTPUT
+            echo "ℹ️ No OIDC provider found yet"
+          fi
+
+          ROLE_NAME="${TF_VAR_PREFIX}-github-deploy-role"
+          if aws iam get-role --role-name "$ROLE_NAME" >/dev/null 2>&1; then
+            ROLE_ARN=$(aws iam get-role --role-name "$ROLE_NAME" --query 'Role.Arn' --output text)
+            echo "role_exists=true" >> $GITHUB_OUTPUT
+            echo "role_arn=${ROLE_ARN}" >> $GITHUB_OUTPUT
+            echo "✅ Found deploy role: ${ROLE_NAME} (${ROLE_ARN})"
+          else
+            echo "role_exists=false" >> $GITHUB_OUTPUT
+            echo "ℹ️ No deploy role found (expected for first-time per repo)"
+          fi
+        env:
+          TF_VAR_PREFIX: ${{ env.TF_VAR_PREFIX }}
+
       - name: Terraform Init & Apply (OIDC)
+        if: ${{ steps.detect.outputs.provider_exists != 'true' || steps.detect.outputs.role_exists != 'true' }}
         working-directory: infra/1-oidc
         run: |
           terraform init -reconfigure
           terraform plan -var-file=terraform.tfvars
           terraform apply -auto-approve -var-file=terraform.tfvars
 
-      - name: Retrieve OIDC Outputs
+      - name: Retrieve role ARN from Terraform (if applied)
         id: tf_outputs
+        if: ${{ steps.detect.outputs.role_exists != 'true' }}
         working-directory: infra/1-oidc
         run: |
           OIDC_ROLE_ARN=$(terraform output -raw github_role_arn)
           echo "oidc_role_arn=${OIDC_ROLE_ARN}" >> $GITHUB_OUTPUT
           echo "OIDC_ROLE_ARN=${OIDC_ROLE_ARN}" >> $GITHUB_ENV
 
+      - name: Use detected role ARN (if role already existed)
+        id: reuse_outputs
+        if: ${{ steps.detect.outputs.role_exists == 'true' }}
+        run: |
+          echo "OIDC_ROLE_ARN=${{ steps.detect.outputs.role_arn }}" >> $GITHUB_ENV
+
+      - name: Expose OIDC Role ARN
+        id: expose
+        run: |
+          if [ -z "${OIDC_ROLE_ARN:-}" ]; then
+            echo "❌ OIDC_ROLE_ARN not set."
+            exit 1
+          fi
+          echo "oidc_role_arn=${OIDC_ROLE_ARN}" >> $GITHUB_OUTPUT
+
       - name: Test OIDC Authentication
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: ${{ steps.tf_outputs.outputs.oidc_role_arn }}
+          role-to-assume: ${{ steps.expose.outputs.oidc_role_arn }}
           aws-region: ${{ env.AWS_REGION }}
           role-session-name: GitHubActions-OIDCTest
 
@@ -124,19 +211,29 @@ jobs:
         run: |
           echo "## 🎉 OIDC Setup Complete!" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### ✅ What was created:" >> $GITHUB_STEP_SUMMARY
-          echo "- GitHub OIDC Provider in AWS" >> $GITHUB_STEP_SUMMARY
-          echo "- GitHub Deployment Role with necessary permissions" >> $GITHUB_STEP_SUMMARY
+          echo "### ✅ What was created or verified:" >> $GITHUB_STEP_SUMMARY
+          echo "- GitHub OIDC Provider in AWS (created if missing, reused if existing)" >> $GITHUB_STEP_SUMMARY
+          echo "- GitHub Deployment Role for this repository (created if missing)" >> $GITHUB_STEP_SUMMARY
           echo "- Trust relationship between GitHub Actions and AWS" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### 🔑 GitHub Role ARN:" >> $GITHUB_STEP_SUMMARY
           echo "\`${{ needs.setup_oidc.outputs.oidc_role_arn }}\`" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### 🧹 Critical Next Steps:" >> $GITHUB_STEP_SUMMARY
-          echo "1. **DELETE the temporary AWS user** from AWS Console" >> $GITHUB_STEP_SUMMARY
-          echo "2. **DELETE the \`INITIAL_SECRETS_B64\` secret** from GitHub repository settings" >> $GITHUB_STEP_SUMMARY
-          echo "3. **Keep only \`SECRETS_B64\`** for future deployments" >> $GITHUB_STEP_SUMMARY
-          echo "4. **Delete local .initial_secrets file**: \`rm .initial_secrets\`" >> $GITHUB_STEP_SUMMARY
+          echo "### 🧹 Critical Next Steps (SECURITY CLEANUP):" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "⚠️ **IMMEDIATELY perform these security cleanup steps:**" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "1. **Delete temporary AWS user:**" >> $GITHUB_STEP_SUMMARY
+          echo "   - AWS Console → IAM → Users → temp-setup-{prefix}-{date} → Delete" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "2. **Delete temporary GitHub secret:**" >> $GITHUB_STEP_SUMMARY
+          echo "   - GitHub repo → Settings → Secrets → \`INITIAL_SECRETS_B64\` → Delete" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "3. **Clean up local files:**" >> $GITHUB_STEP_SUMMARY
+          echo "   - \`rm .initial_secrets\`" >> $GITHUB_STEP_SUMMARY
+          echo "   - \`rm .initial_secrets.b64 .secrets.b64\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "4. **Keep only \`SECRETS_B64\` secret** in GitHub for all future deployments" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### 🚀 Ready for OIDC Deployments!" >> $GITHUB_STEP_SUMMARY
           echo "You can now use the \`deploy-with-oidc.yml\` workflow for secure, credential-free deployments." >> $GITHUB_STEP_SUMMARY
