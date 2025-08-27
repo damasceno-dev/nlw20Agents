@@ -111,6 +111,9 @@ resource "aws_iam_policy" "rds_policy" {
           "rds:DescribeDBClusterSnapshots",
           "rds:RestoreDBClusterFromSnapshot",
           "rds:ModifyCurrentDBClusterCapacity",
+          
+          # Global cluster permissions
+          "rds:DescribeGlobalClusters",
 
           # Subnet groups
           "rds:CreateDBSubnetGroup",
