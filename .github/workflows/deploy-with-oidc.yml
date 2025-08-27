@@ -33,7 +33,7 @@ jobs:
     if: ${{ github.event.inputs.deploy_infra != 'false' }}
     outputs:
       credentials_ready: ${{ steps.completion.outputs.done }}
-      oidc_role_arn: ${{ steps.get_oidc_role.outputs.role_arn }}
+      oidc_role_arn: ${{ steps.construct_role_arn.outputs.role_arn }}
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
@@ -48,45 +48,22 @@ jobs:
           export $(grep -v '^#' .secrets | grep -v '^$' | xargs)
           echo "AWS_REGION=${AWS_REGION}" >> $GITHUB_ENV
           echo "TF_VAR_PREFIX=${TF_VAR_PREFIX}" >> $GITHUB_ENV
+          echo "AWS_ACCOUNT_ID=${AWS_ACCOUNT_ID}" >> $GITHUB_ENV
           echo "GITHUB_ORG=${GITHUB_ORG}" >> $GITHUB_ENV
           echo "GITHUB_REPO=${GITHUB_REPO}" >> $GITHUB_ENV
 
-      - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v3
-        with:
-          terraform_version: "1.6.0"
-
-      - name: Configure Terraform Backend for OIDC
-        working-directory: infra/1-oidc
+      - name: Construct OIDC Role ARN
+        id: construct_role_arn
         run: |
-          # Configure S3 backend for Terraform state
-          cat <<EOF > backend.tf
-          terraform {
-            backend "s3" {
-              bucket = "${TF_VAR_PREFIX}-terraform-state-unique1029"
-              key    = "oidc/terraform.tfstate"
-              region = "${AWS_REGION}"
-            }
-          }
-          EOF
-        env:
-          TF_VAR_PREFIX: ${{ env.TF_VAR_PREFIX }}
-          AWS_REGION: ${{ env.AWS_REGION }}
-
-      - name: Get OIDC Role ARN
-        id: get_oidc_role
-        working-directory: infra/1-oidc
-        run: |
-          terraform init -reconfigure
-          OIDC_ROLE_ARN=$(terraform output -raw github_deploy_role_arn)
+          OIDC_ROLE_ARN="arn:aws:iam::${{ env.AWS_ACCOUNT_ID }}:role/${{ env.TF_VAR_PREFIX }}-github-deploy-role"
           echo "role_arn=${OIDC_ROLE_ARN}" >> $GITHUB_OUTPUT
           echo "OIDC_ROLE_ARN=${OIDC_ROLE_ARN}" >> $GITHUB_ENV
-          echo "✅ Retrieved OIDC Role ARN: ${OIDC_ROLE_ARN}"
+          echo "✅ Constructed OIDC Role ARN: ${OIDC_ROLE_ARN}"
 
       - name: Test OIDC Authentication
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: ${{ steps.get_oidc_role.outputs.role_arn }}
+          role-to-assume: ${{ steps.construct_role_arn.outputs.role_arn }}
           aws-region: ${{ env.AWS_REGION }}
           role-session-name: GitHubActions-DeployTest
 
