@@ -12,14 +12,6 @@ terraform {
     encrypt = true
   }
 }
-data "terraform_remote_state" "admin" {
-  backend = "s3"
-  config = {
-    bucket  = "agents-terraform-state-unique1029"  # S3 bucket storing state from 1-admin
-    key     = "1-admin/terraform.tfstate"               # Match the key from 1-admin
-    region  = "us-east-1"
-  }
-}
 
 
 provider "aws" {
@@ -31,31 +23,31 @@ provider "aws" {
 
 module "vpc" {
   source         = "./modules/vpc"
-  prefix         = data.terraform_remote_state.admin.outputs.prefix
+  prefix         = var.prefix
   vpc_cidr_block = var.vpc_cidr_block
 }
 
 module "aurora" {
   source      = "./modules/aurora"
-  prefix      = data.terraform_remote_state.admin.outputs.prefix
+  prefix      = var.prefix
   vpc_id      = module.vpc.vpc_id
   subnet_ids  = module.vpc.subnet_ids
-  db_name     = data.terraform_remote_state.admin.outputs.prefix
+  db_name     = var.prefix
   db_username = "postgres"
   db_password = var.db_password
 }
 module "ecr" {
   source = "./modules/ecr"
-  prefix = data.terraform_remote_state.admin.outputs.prefix
+  prefix = var.prefix
 }
 # module "s3" {
 #   source = "./modules/s3"
-#   prefix = data.terraform_remote_state.admin.outputs.prefix
+#   prefix = var.prefix
 # }
 # 
 # module "sqs" {
 #   source = "./modules/sqs"
-#   prefix                       = data.terraform_remote_state.admin.outputs.prefix
+#   prefix                       = var.prefix
 #   delay_seconds                = 0
 #   message_retention_seconds    = 345600
 #   visibility_timeout_seconds   = 30

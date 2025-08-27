@@ -8,11 +8,10 @@ variable "db_password" {
   sensitive   = true
 }
 
-# the prefix is coming from the previous step
-# variable "prefix" {
-#   description = "Prefix for resource names"
-#   type        = string
-# }
+variable "prefix" {
+  description = "Prefix for resource names"
+  type        = string
+}
 
 # for github actions or act (ci), its going to take the profile from the aws_id used in the credentials step. 
 # Use this if you want to run locally and have aws profiles configured in your machine 

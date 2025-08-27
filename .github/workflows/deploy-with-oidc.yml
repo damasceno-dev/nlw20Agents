@@ -99,10 +99,12 @@ jobs:
           export $(grep -v '^#' .secrets | grep -v '^$' | xargs)
           echo "AWS_REGION=${AWS_REGION}" >> $GITHUB_ENV
           echo "TF_VAR_DB_PASSWORD=${TF_VAR_DB_PASSWORD}" >> $GITHUB_ENV
+          echo "TF_VAR_PREFIX=${TF_VAR_PREFIX}" >> $GITHUB_ENV
           
           echo "::add-mask::$TF_VAR_DB_PASSWORD"
           
           cat <<EOF > infra/2-resources/terraform.tfvars
+          prefix = "${TF_VAR_PREFIX}"
           db_password = "${TF_VAR_DB_PASSWORD}"
           EOF
 
