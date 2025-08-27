@@ -12,9 +12,9 @@ output "ecr_repository_url" {
   description = "URL of the ECR repository"
 }
 
-output "rds_endpoint" {
-  value       = module.rds.rds_endpoint
-  description = "The RDS endpoint for database connection"
+output "aurora_cluster_endpoint" {
+  value       = module.aurora.aurora_cluster_endpoint
+  description = "The Aurora cluster endpoint for database connection"
 }
 # 
 # output "s3_bucket_name" {
