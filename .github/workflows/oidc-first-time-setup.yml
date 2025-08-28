@@ -168,8 +168,13 @@ jobs:
           if aws iam get-role --role-name "$ROLE_NAME" >/dev/null 2>&1; then
             echo "🗑️  Deleting existing role: $ROLE_NAME"
             # Detach all policies first
-            aws iam list-attached-role-policies --role-name "$ROLE_NAME" --query 'AttachedPolicies[].PolicyArn' --output text | \
-              xargs -r -I {} aws iam detach-role-policy --role-name "$ROLE_NAME" --policy-arn {}
+            echo "   Detaching policies from role..."
+            aws iam list-attached-role-policies --role-name "$ROLE_NAME" --query 'AttachedPolicies[].PolicyArn' --output text | tr '\t' '\n' | while read -r policy_arn; do
+              if [ -n "$policy_arn" ]; then
+                echo "   - Detaching policy: $policy_arn"
+                aws iam detach-role-policy --role-name "$ROLE_NAME" --policy-arn "$policy_arn"
+              fi
+            done
             # Delete the role
             aws iam delete-role --role-name "$ROLE_NAME"
             echo "✅ Role deleted"
