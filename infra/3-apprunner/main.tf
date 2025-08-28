@@ -14,14 +14,6 @@ terraform {
 }
 
 data "aws_caller_identity" "current" {}
-data "terraform_remote_state" "admin" {
-  backend = "s3"
-  config = {
-    bucket = "agents-terraform-state-unique1029"
-    key    = "1-admin/terraform.tfstate"
-    region = "us-east-1"
-  }
-}
 data "terraform_remote_state" "resources" {
   backend = "s3"
   config = {
@@ -41,7 +33,7 @@ provider "aws" {
 
 module "app_runner" {
   source              = "./modules/app_runner"
-  prefix             = data.terraform_remote_state.admin.outputs.prefix
+  prefix             = var.prefix
   account_id = data.aws_caller_identity.current.account_id
   repository_name = data.terraform_remote_state.resources.outputs.ecr_repository_name
   repository_arn = data.terraform_remote_state.resources.outputs.ecr_repository_arn

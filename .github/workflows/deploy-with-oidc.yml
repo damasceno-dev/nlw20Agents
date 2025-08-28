@@ -257,6 +257,12 @@ jobs:
         run: |
           export $(grep -v '^#' .secrets | grep -v '^$' | xargs)
           echo "AWS_REGION=${AWS_REGION}" >> $GITHUB_ENV
+          echo "TF_VAR_PREFIX=${TF_VAR_PREFIX}" >> $GITHUB_ENV
+          
+          # Create terraform.tfvars for App Runner
+          cat <<EOF > infra/3-apprunner/terraform.tfvars
+          prefix = "${TF_VAR_PREFIX}"
+          EOF
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
@@ -274,7 +280,7 @@ jobs:
         working-directory: infra/3-apprunner
         run: |
           terraform init -reconfigure
-          terraform apply -auto-approve
+          terraform apply -auto-approve -var-file=terraform.tfvars
 
       - name: Retrieve App Runner URL
         working-directory: infra/3-apprunner
