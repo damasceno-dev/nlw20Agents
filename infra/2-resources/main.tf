@@ -5,12 +5,8 @@ terraform {
       version = "5.40.0"
     }
   }
-  backend "s3" {
-    bucket  = "agents-terraform-state-unique1029"  # Must match the bucket created in 1-admin
-    key     = "2-resources/terraform.tfstate"
-    region  = "us-east-1"
-    encrypt = true
-  }
+  # Backend configuration is dynamically created by the workflow
+  # See .github/workflows/deploy-with-oidc.yml
 }
 
 

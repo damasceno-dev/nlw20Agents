@@ -5,20 +5,14 @@ terraform {
       version = "5.40.0"
     }
   }
-  backend "s3" {
-    # This will be dynamically configured by the workflow
-    # bucket  = "${var.prefix}-terraform-state-unique1029"  
-    key     = "4-amplify/terraform.tfstate"
-    region  = "us-east-1"
-    encrypt = true
-  }
+  # Backend configuration is dynamically created by the workflow
+  # See .github/workflows/deploy-with-oidc.yml
 }
 
 data "aws_caller_identity" "current" {}
 data "terraform_remote_state" "resources" {
   backend = "s3"
   config = {
-    # This will be dynamically configured by the workflow to match the prefix
     bucket = "${var.prefix}-terraform-state-unique1029"
     key    = "2-resources/terraform.tfstate"
     region = "us-east-1"

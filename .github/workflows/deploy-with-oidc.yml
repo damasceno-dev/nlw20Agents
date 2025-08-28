@@ -125,6 +125,24 @@ jobs:
           aws-region: ${{ env.AWS_REGION }}
           role-session-name: GitHubActions-DeployResources
 
+      - name: Configure Terraform Backend (Resources)
+        working-directory: infra/2-resources
+        run: |
+          # Configure S3 backend for Terraform state dynamically
+          cat <<EOF > backend.tf
+          terraform {
+            backend "s3" {
+              bucket = "${TF_VAR_PREFIX}-terraform-state-unique1029"
+              key    = "2-resources/terraform.tfstate"
+              region = "${AWS_REGION}"
+              encrypt = true
+            }
+          }
+          EOF
+        env:
+          TF_VAR_PREFIX: ${{ env.TF_VAR_PREFIX }}
+          AWS_REGION: ${{ env.AWS_REGION }}
+
       - name: Terraform Init & Apply (Resources)
         working-directory: infra/2-resources
         run: |
@@ -281,6 +299,24 @@ jobs:
           aws-region: ${{ env.AWS_REGION }}
           role-session-name: GitHubActions-DeployAppRunner
 
+      - name: Configure Terraform Backend (App Runner)
+        working-directory: infra/3-apprunner
+        run: |
+          # Configure S3 backend for Terraform state dynamically
+          cat <<EOF > backend.tf
+          terraform {
+            backend "s3" {
+              bucket = "${TF_VAR_PREFIX}-terraform-state-unique1029"
+              key    = "3-apprunner/terraform.tfstate"
+              region = "${AWS_REGION}"
+              encrypt = true
+            }
+          }
+          EOF
+        env:
+          TF_VAR_PREFIX: ${{ env.TF_VAR_PREFIX }}
+          AWS_REGION: ${{ env.AWS_REGION }}
+
       - name: Terraform Init & Apply (App Runner)
         working-directory: infra/3-apprunner
         run: |
@@ -345,7 +381,7 @@ jobs:
           aws-region: ${{ env.AWS_REGION }}
           role-session-name: GitHubActions-DeployAmplify
 
-      - name: Configure Terraform Backend
+      - name: Configure Terraform Backend (Amplify)
         working-directory: infra/4-amplify
         run: |
           # Configure S3 backend for Terraform state dynamically
