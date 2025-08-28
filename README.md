@@ -61,8 +61,8 @@ Follow these steps to set up your full-stack project with secure OIDC authentica
 # User name: temp-setup-{prefix}-{YYYYMMDD}
 # Example: temp-setup-agents-20250826
 # Attach policy: AdministratorAccess (AWS managed policy)
-# Security credentials → Create access key → CLI
-# ⚠️ Save these credentials in .initial_secrets file - you'll delete this user in 30 minutes!
+# After the user is created, in Security credentials tab→ Create access key → CLI
+# ⚠️ Save these credentials in .initial_secrets file
 ```
 
 ### Step 2: Local Configuration
@@ -207,9 +207,19 @@ The workflow will (create if missing, or verify if existing):
 - Test OIDC authentication
 - Output the role ARN for verification
 
-### Step 5: Security Cleanup (Critical!)
+### Step 5: Test Full Deployment (Before Cleanup!)
 
-**⚠️ IMMEDIATELY after OIDC setup succeeds:**
+**🚀 CRITICAL: Test your deployment BEFORE deleting temporary credentials:**
+
+1. **Run the "Deploy with OIDC" workflow** to verify OIDC works end-to-end
+2. **Confirm all resources deploy successfully** (infrastructure, server, app runner)
+3. **Only proceed to cleanup after successful deployment**
+
+> **Why?** If OIDC has permission issues or other problems, you'll need the temporary credentials to fix them. Don't delete your safety net until you know everything works!
+
+### Step 6: Security Cleanup (ONLY AFTER SUCCESSFUL DEPLOYMENT)
+
+**⚠️ Keep temporary credentials until deployment succeeds:**
 
 1. **Delete temporary AWS user:**
    ```bash
@@ -327,8 +337,9 @@ docker run --name postgres-local -e POSTGRES_PASSWORD=postgres -p 5432:5432 -d p
 ### Environment Variables
 
 **Development (.NET)**
+
+server/server.API/appsettings.Development.json
 ```json
-// server/server.API/appsettings.Development.json
 {
   "ConnectionStrings": {
     "DefaultConnection": "Host=localhost;Database=agents_dev;Username=postgres;Password=postgres"

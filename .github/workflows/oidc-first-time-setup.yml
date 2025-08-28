@@ -262,21 +262,23 @@ jobs:
           echo "### 🔑 GitHub Role ARN:" >> $GITHUB_STEP_SUMMARY
           echo "\`${{ needs.setup_oidc.outputs.oidc_role_arn }}\`" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### 🧹 Critical Next Steps (SECURITY CLEANUP):" >> $GITHUB_STEP_SUMMARY
+          echo "### 🚀 Next Steps:" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "⚠️ **IMMEDIATELY perform these security cleanup steps:**" >> $GITHUB_STEP_SUMMARY
+          echo "✅ **OIDC setup is complete! Now test your deployment:**" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "1. **Delete temporary AWS user:**" >> $GITHUB_STEP_SUMMARY
-          echo "   - AWS Console → IAM → Users → temp-setup-{prefix}-{date} → Delete" >> $GITHUB_STEP_SUMMARY
+          echo "1. **Run the \`deploy-with-oidc.yml\` workflow** to verify OIDC works end-to-end" >> $GITHUB_STEP_SUMMARY
+          echo "2. **Confirm all resources deploy successfully**" >> $GITHUB_STEP_SUMMARY
+          echo "3. **Only after successful deployment, perform security cleanup:**" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "2. **Delete temporary GitHub secret:**" >> $GITHUB_STEP_SUMMARY
-          echo "   - GitHub repo → Settings → Secrets → \`INITIAL_SECRETS_B64\` → Delete" >> $GITHUB_STEP_SUMMARY
+          echo "### 🧹 Security Cleanup (ONLY AFTER SUCCESSFUL DEPLOYMENT):" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "3. **Clean up local files:**" >> $GITHUB_STEP_SUMMARY
-          echo "   - \`rm .initial_secrets\`" >> $GITHUB_STEP_SUMMARY
-          echo "   - \`rm .initial_secrets.b64 .secrets.b64\`" >> $GITHUB_STEP_SUMMARY
+          echo "⚠️ **Keep temporary credentials until deployment succeeds:**" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "4. **Keep only \`SECRETS_B64\` secret** in GitHub for all future deployments" >> $GITHUB_STEP_SUMMARY
+          echo "- **Why?** If OIDC has issues, you'll need temp credentials to fix them" >> $GITHUB_STEP_SUMMARY
+          echo "- **When to delete:** Only after \`deploy-with-oidc.yml\` completes successfully" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### 🚀 Ready for OIDC Deployments!" >> $GITHUB_STEP_SUMMARY
-          echo "You can now use the \`deploy-with-oidc.yml\` workflow for secure, credential-free deployments." >> $GITHUB_STEP_SUMMARY
+          echo "**Cleanup steps (after successful deployment):**" >> $GITHUB_STEP_SUMMARY
+          echo "1. Delete temporary AWS user: AWS Console → IAM → Users → temp-setup-* → Delete" >> $GITHUB_STEP_SUMMARY
+          echo "2. Delete temporary GitHub secret: Settings → Secrets → \`INITIAL_SECRETS_B64\` → Delete" >> $GITHUB_STEP_SUMMARY
+          echo "3. Clean up local files: \`rm .initial_secrets .initial_secrets.b64\`" >> $GITHUB_STEP_SUMMARY
+          echo "4. Keep only \`SECRETS_B64\` secret for future deployments" >> $GITHUB_STEP_SUMMARY
