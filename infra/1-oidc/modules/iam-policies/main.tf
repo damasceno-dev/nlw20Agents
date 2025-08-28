@@ -573,3 +573,74 @@ resource "aws_iam_policy" "sqs_policy" {
     IAC     = "True"
   }
 }
+
+# ========================================
+# AMPLIFY POLICY
+# ========================================
+resource "aws_iam_policy" "amplify_policy" {
+  name        = "${var.prefix}-OIDC-AmplifyPolicy"
+  description = "IAM policy for managing AWS Amplify via GitHub OIDC"
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          # Amplify App management
+          "amplify:CreateApp",
+          "amplify:DeleteApp",
+          "amplify:GetApp",
+          "amplify:ListApps",
+          "amplify:UpdateApp",
+          
+          # Branch management
+          "amplify:CreateBranch",
+          "amplify:DeleteBranch",
+          "amplify:GetBranch",
+          "amplify:ListBranches",
+          "amplify:UpdateBranch",
+          
+          # Domain management
+          "amplify:CreateDomainAssociation",
+          "amplify:DeleteDomainAssociation",
+          "amplify:GetDomainAssociation",
+          "amplify:ListDomainAssociations",
+          "amplify:UpdateDomainAssociation",
+          
+          # Build and deployment
+          "amplify:StartJob",
+          "amplify:StopJob",
+          "amplify:GetJob",
+          "amplify:ListJobs",
+          
+          # Webhook management
+          "amplify:CreateWebhook",
+          "amplify:DeleteWebhook",
+          "amplify:GetWebhook",
+          "amplify:ListWebhooks",
+          "amplify:UpdateWebhook",
+          
+          # Backend environment
+          "amplify:CreateBackendEnvironment",
+          "amplify:DeleteBackendEnvironment",
+          "amplify:GetBackendEnvironment",
+          "amplify:ListBackendEnvironments",
+          "amplify:UpdateBackendEnvironment",
+          
+          # Tagging
+          "amplify:ListTagsForResource",
+          "amplify:TagResource",
+          "amplify:UntagResource"
+        ]
+        Resource = "*"
+      }
+    ]
+  })
+
+  tags = {
+    Name    = "${var.prefix}-OIDC-AmplifyPolicy"
+    Project = var.prefix
+    IAC     = "True"
+  }
+}

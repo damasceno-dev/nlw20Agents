@@ -100,6 +100,7 @@ output "setup_complete" {
     - RDS and Aurora
     - ECR
     - App Runner
+    - Amplify
     - IAM (for service roles)
     - S3 (state and app buckets)
     - CloudWatch Logs
@@ -135,6 +136,7 @@ output "setup_complete" {
     aws_iam_role_policy_attachment.attach_rds,
     aws_iam_role_policy_attachment.attach_ecr,
     aws_iam_role_policy_attachment.attach_app_runner,
+    aws_iam_role_policy_attachment.attach_amplify,
     aws_iam_role_policy_attachment.attach_iam,
     aws_iam_role_policy_attachment.attach_s3,
     aws_iam_role_policy_attachment.attach_cloudwatch,

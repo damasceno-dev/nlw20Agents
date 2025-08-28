@@ -203,3 +203,8 @@ resource "aws_iam_role_policy_attachment" "attach_sqs" {
   role       = aws_iam_role.github_deploy.name
   policy_arn = module.iam_policies.sqs_policy_arn
 }
+
+resource "aws_iam_role_policy_attachment" "attach_amplify" {
+  role       = aws_iam_role.github_deploy.name
+  policy_arn = module.iam_policies.amplify_policy_arn
+}
