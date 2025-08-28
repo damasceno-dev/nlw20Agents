@@ -24,12 +24,13 @@ provider "aws" {
 }
 
 module "amplify" {
-  source            = "./modules/amplify"
-  prefix            = var.prefix
-  account_id        = data.aws_caller_identity.current.account_id
-  app_runner_url    = var.app_runner_url
-  github_repository = var.github_repository
-  branch_name       = var.branch_name
+  source              = "./modules/amplify"
+  prefix              = var.prefix
+  account_id          = data.aws_caller_identity.current.account_id
+  app_runner_url      = var.app_runner_url
+  github_repository   = var.github_repository
+  branch_name         = var.branch_name
+  github_access_token = var.github_access_token
   
   # Environment variables for the Next.js app
   environment_variables = var.app_runner_url != "" ? {

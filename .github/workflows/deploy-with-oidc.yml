@@ -364,6 +364,7 @@ jobs:
           prefix = "${TF_VAR_PREFIX}"
           github_repository = "https://github.com/${GITHUB_ORG}/${GITHUB_REPO}"
           branch_name = "main"
+          github_access_token = "${{ secrets.GITHUB_TOKEN }}"
           EOF
 
       - name: Setup Terraform

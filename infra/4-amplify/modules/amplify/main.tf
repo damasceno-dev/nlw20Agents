@@ -56,8 +56,9 @@ resource "aws_iam_role_policy_attachment" "amplify_policy_attachment" {
 
 # Amplify App
 resource "aws_amplify_app" "main" {
-  name       = "${var.prefix}-web-app"
-  repository = var.github_repository
+  name         = "${var.prefix}-web-app"
+  repository   = var.github_repository
+  access_token = var.github_access_token
 
   # Build settings for Next.js with orval API generation
   build_spec = <<-EOT

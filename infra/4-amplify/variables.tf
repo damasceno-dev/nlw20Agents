@@ -20,3 +20,9 @@ variable "branch_name" {
   type        = string
   default     = "main"
 }
+
+variable "github_access_token" {
+  description = "GitHub personal access token for repository access"
+  type        = string
+  sensitive   = true
+}
