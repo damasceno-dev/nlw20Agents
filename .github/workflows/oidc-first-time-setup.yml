@@ -7,6 +7,11 @@ on:
         description: 'Type "SETUP" to confirm OIDC initial deployment'
         required: true
         type: string
+      force_oidc_recreation:
+        description: 'Force recreation of OIDC provider and role (ignores existing resources)'
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   id-token: write
@@ -130,21 +135,64 @@ jobs:
       - name: Check for Existing OIDC Provider
         id: check_oidc
         run: |
-          echo "🔍 Checking if GitHub OIDC provider already exists in this AWS account..."
-          
-          GITHUB_PROVIDER_ARN=$(aws iam list-open-id-connect-providers \
-            --query 'OpenIDConnectProviderList[?contains(Arn, `token.actions.githubusercontent.com`)].Arn' \
-            --output text || echo "")
-          
-          if [ -n "${GITHUB_PROVIDER_ARN}" ] && [ "${GITHUB_PROVIDER_ARN}" != "None" ]; then
-            echo "oidc_exists=true" >> $GITHUB_OUTPUT
-            echo "oidc_provider_arn=${GITHUB_PROVIDER_ARN}" >> $GITHUB_OUTPUT
-            echo "✅ OIDC Provider already exists: ${GITHUB_PROVIDER_ARN}"
-            echo "ℹ️  This setup will reuse the existing provider and create only the project-specific role"
-          else
+          if [ "${{ github.event.inputs.force_oidc_recreation }}" == "true" ]; then
+            echo "🔄 Force recreation enabled - will recreate OIDC provider and role from scratch"
             echo "oidc_exists=false" >> $GITHUB_OUTPUT
-            echo "ℹ️  No OIDC provider found - will create both provider and role"
+            echo "oidc_provider_arn=" >> $GITHUB_OUTPUT
+          else
+            echo "🔍 Checking if GitHub OIDC provider already exists in this AWS account..."
+            
+            GITHUB_PROVIDER_ARN=$(aws iam list-open-id-connect-providers \
+              --query 'OpenIDConnectProviderList[?contains(Arn, `token.actions.githubusercontent.com`)].Arn' \
+              --output text || echo "")
+            
+            if [ -n "${GITHUB_PROVIDER_ARN}" ] && [ "${GITHUB_PROVIDER_ARN}" != "None" ]; then
+              echo "oidc_exists=true" >> $GITHUB_OUTPUT
+              echo "oidc_provider_arn=${GITHUB_PROVIDER_ARN}" >> $GITHUB_OUTPUT
+              echo "✅ OIDC Provider already exists: ${GITHUB_PROVIDER_ARN}"
+              echo "ℹ️  This setup will reuse the existing provider and create only the project-specific role"
+            else
+              echo "oidc_exists=false" >> $GITHUB_OUTPUT
+              echo "oidc_provider_arn=" >> $GITHUB_OUTPUT
+              echo "ℹ️  No OIDC provider found - will create both provider and role"
+            fi
           fi
+
+      - name: Cleanup Existing Resources (if force recreation)
+        if: ${{ github.event.inputs.force_oidc_recreation == 'true' }}
+        run: |
+          echo "🧹 Force recreation enabled - cleaning up existing OIDC resources..."
+          
+          # Check and delete existing role
+          ROLE_NAME="${TF_VAR_PREFIX}-github-deploy-role"
+          if aws iam get-role --role-name "$ROLE_NAME" >/dev/null 2>&1; then
+            echo "🗑️  Deleting existing role: $ROLE_NAME"
+            # Detach all policies first
+            aws iam list-attached-role-policies --role-name "$ROLE_NAME" --query 'AttachedPolicies[].PolicyArn' --output text | \
+              xargs -r -I {} aws iam detach-role-policy --role-name "$ROLE_NAME" --policy-arn {}
+            # Delete the role
+            aws iam delete-role --role-name "$ROLE_NAME"
+            echo "✅ Role deleted"
+          else
+            echo "ℹ️  Role $ROLE_NAME does not exist"
+          fi
+          
+          # Check and delete existing OIDC provider
+          EXISTING_PROVIDER=$(aws iam list-open-id-connect-providers \
+            --query 'OpenIDConnectProviderList[?contains(Arn, `token.actions.githubusercontent.com`)].Arn' \
+            --output text 2>/dev/null || echo "")
+          
+          if [ -n "$EXISTING_PROVIDER" ] && [ "$EXISTING_PROVIDER" != "None" ]; then
+            echo "🗑️  Deleting existing OIDC provider: $EXISTING_PROVIDER"
+            aws iam delete-open-id-connect-provider --open-id-connect-provider-arn "$EXISTING_PROVIDER"
+            echo "✅ OIDC provider deleted"
+          else
+            echo "ℹ️  No existing OIDC provider found"
+          fi
+          
+          echo "🧹 Cleanup complete - ready for fresh OIDC setup"
+        env:
+          TF_VAR_PREFIX: ${{ env.TF_VAR_PREFIX }}
 
       - name: Configure Terraform Variables for OIDC Detection
         run: |
@@ -198,12 +246,17 @@ jobs:
           echo "## 🎉 OIDC Setup Complete!" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### ✅ What was created:" >> $GITHUB_STEP_SUMMARY
-          if [ "${{ needs.setup_oidc.outputs.oidc_exists }}" == "true" ]; then
+          if [ "${{ github.event.inputs.force_oidc_recreation }}" == "true" ]; then
+            echo "- **FORCE RECREATION ENABLED** - Cleaned up and recreated all resources" >> $GITHUB_STEP_SUMMARY
+            echo "- GitHub OIDC Provider: **RECREATED** (force recreation)" >> $GITHUB_STEP_SUMMARY
+            echo "- GitHub Deployment Role: **RECREATED** (force recreation)" >> $GITHUB_STEP_SUMMARY
+          elif [ "${{ needs.setup_oidc.outputs.oidc_exists }}" == "true" ]; then
             echo "- GitHub OIDC Provider: **DETECTED & REUSED** (already existed in AWS account)" >> $GITHUB_STEP_SUMMARY
+            echo "- GitHub Deployment Role: **CREATED** for this repository" >> $GITHUB_STEP_SUMMARY
           else
             echo "- GitHub OIDC Provider: **CREATED** (new in AWS account)" >> $GITHUB_STEP_SUMMARY
+            echo "- GitHub Deployment Role: **CREATED** for this repository" >> $GITHUB_STEP_SUMMARY
           fi
-          echo "- GitHub Deployment Role: **CREATED** for this repository" >> $GITHUB_STEP_SUMMARY
           echo "- Trust relationship between GitHub Actions and AWS" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### 🔑 GitHub Role ARN:" >> $GITHUB_STEP_SUMMARY
