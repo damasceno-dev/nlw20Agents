@@ -88,13 +88,7 @@ resource "aws_amplify_app" "main" {
   EOT
 
   # Environment variables
-  dynamic "environment_variables" {
-    for_each = var.environment_variables
-    content {
-      name  = environment_variables.key
-      value = environment_variables.value
-    }
-  }
+  environment_variables = var.environment_variables
 
   # Enable auto branch creation and deployment
   enable_auto_branch_creation = false
