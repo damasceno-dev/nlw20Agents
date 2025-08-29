@@ -132,3 +132,25 @@ resource "aws_amplify_branch" "main" {
     Environment = "production"
   }
 }
+
+# Trigger initial deployment
+resource "null_resource" "trigger_deployment" {
+  count = var.github_repository != "" ? 1 : 0
+  
+  depends_on = [aws_amplify_branch.main]
+  
+  provisioner "local-exec" {
+    command = <<-EOT
+      aws amplify start-job \
+        --app-id ${aws_amplify_app.main.id} \
+        --branch-name ${var.branch_name} \
+        --job-type RELEASE \
+        --region us-east-1
+    EOT
+  }
+
+  triggers = {
+    app_id = aws_amplify_app.main.id
+    branch = var.branch_name
+  }
+}
