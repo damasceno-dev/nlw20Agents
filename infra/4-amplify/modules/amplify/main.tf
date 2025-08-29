@@ -57,6 +57,7 @@ resource "aws_iam_role_policy_attachment" "amplify_policy_attachment" {
 # Amplify App
 resource "aws_amplify_app" "main" {
   name         = "${var.prefix}-web-app"
+  description  = "Next.js frontend with API integration - Updated ${formatdate("YYYY-MM-DD hh:mm", timestamp())}"
   repository   = var.github_repository
   access_token = var.github_access_token
 
@@ -124,7 +125,7 @@ resource "aws_amplify_app" "main" {
     Name        = "${var.prefix}-web-app"
     Project     = var.prefix
     Environment = "production"
-    BuildSpec   = "v5-absolute-paths" # Change this to force rebuild
+    BuildSpec   = "v6-force-deploy-${formatdate("YYYYMMDD-hhmm", timestamp())}" # Force rebuild with timestamp
   }
 }
 
