@@ -68,10 +68,10 @@ resource "aws_amplify_app" "main" {
       phases:
         preBuild:
           commands:
-            - echo "=== DEBUG: AMPLIFY BUILD SPEC UPDATED $(date) ==="
-            - echo "Current directory:" && pwd
-            - echo "Directory contents:" && ls -la
-            - echo "Looking for web directory..." && find . -name "web" -type d
+            - 'echo "=== DEBUG: AMPLIFY BUILD SPEC UPDATED ==="'
+            - 'echo "Current directory:" && pwd'
+            - 'echo "Directory contents:" && ls -la'
+            - 'echo "Looking for web directory..." && find . -name "web" -type d'
             - cd web
             - nvm use 20
             - npm ci
