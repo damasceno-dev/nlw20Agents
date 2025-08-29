@@ -72,6 +72,9 @@ resource "aws_amplify_app" "main" {
             - 'echo "Current directory:" && pwd'
             - 'echo "Directory contents:" && ls -la'
             - 'echo "Looking for web directory..." && find . -name "web" -type d'
+            - 'echo "Git status:" && git status'
+            - 'echo "Current commit:" && git rev-parse HEAD'
+            - 'echo "Repository info:" && git remote -v'
             - cd web
             - nvm use 20
             - npm ci
@@ -92,7 +95,9 @@ resource "aws_amplify_app" "main" {
               fi
         build:
           commands:
-            - cd web
+            - echo "Build phase - Current directory:" && pwd
+            - echo "Looking for web directory in build phase:" && ls -la
+            - cd $CODEBUILD_SRC_DIR/nlw20Agents/web
             - nvm use 20
             - npm run build
       artifacts:
