@@ -68,7 +68,10 @@ resource "aws_amplify_app" "main" {
       phases:
         preBuild:
           commands:
-            - cd $CODEBUILD_SRC_DIR/web
+            - echo "Current directory:" && pwd
+            - echo "Directory contents:" && ls -la
+            - echo "Looking for web directory..." && find . -name "web" -type d
+            - cd web
             - nvm use 20
             - npm ci
             # Generate API client from backend swagger if URL is available
@@ -88,7 +91,7 @@ resource "aws_amplify_app" "main" {
               fi
         build:
           commands:
-            - cd $CODEBUILD_SRC_DIR/web
+            - cd web
             - nvm use 20
             - npm run build
       artifacts:
