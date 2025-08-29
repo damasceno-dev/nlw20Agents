@@ -115,6 +115,7 @@ resource "aws_amplify_app" "main" {
     Name        = "${var.prefix}-web-app"
     Project     = var.prefix
     Environment = "production"
+    BuildSpec   = "v2-web-directory" # Change this to force rebuild
   }
 }
 
