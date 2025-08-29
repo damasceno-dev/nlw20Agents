@@ -68,18 +68,27 @@ resource "aws_amplify_app" "main" {
         preBuild:
           commands:
             - cd web
+            - nvm use 20
             - npm ci
             # Generate API client from backend swagger if URL is available
             - |
               if [ -n "$SWAGGER_URL" ] && [ "$SWAGGER_URL" != "" ]; then
                 echo "Generating API client from: $SWAGGER_URL"
-                npm run generate-api:prod
+                # Test if the swagger URL is accessible before running orval
+                if curl -f -s "$SWAGGER_URL" > /dev/null; then
+                  echo "Swagger endpoint is accessible, generating API client..."
+                  npm run generate-api:prod
+                else
+                  echo "Warning: Swagger endpoint not accessible yet, skipping API generation"
+                  echo "The app will still build but without backend integration"
+                fi
               else
                 echo "No SWAGGER_URL provided, skipping API generation"
               fi
         build:
           commands:
             - cd web
+            - nvm use 20
             - npm run build
       artifacts:
         baseDirectory: web/.next
@@ -115,7 +124,7 @@ resource "aws_amplify_app" "main" {
     Name        = "${var.prefix}-web-app"
     Project     = var.prefix
     Environment = "production"
-    BuildSpec   = "v2-web-directory" # Change this to force rebuild
+    BuildSpec   = "v4-node20-orval-safe" # Change this to force rebuild
   }
 }
 
