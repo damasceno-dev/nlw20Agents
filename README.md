@@ -98,6 +98,7 @@ nano .secrets
 # GitHub Configuration
 GITHUB_ORG=your-github-username
 GITHUB_REPO=nlw20Agents
+GH_PAT=your-github-personal-access-token
 
 # AWS Configuration  
 AWS_REGION=us-east-1
@@ -115,6 +116,17 @@ DB_USERNAME=postgres
 OPENAI_API_KEY=your-open-api-key
 
 ```
+
+**📝 Note on GitHub Personal Access Token (GH_PAT):**
+The `GH_PAT` is required for AWS Amplify to access your GitHub repository and create webhooks for automatic deployments.
+
+To create a GitHub Personal Access Token:
+1. Your profile picture → Settings → Developer settings (down under) → Fine-grained tokens
+2. Click "Generate new token"
+3. Give it a name like "Amplify Deployment"
+4. Only select repositories → Select your repo
+5. Give it full write permission on the repo
+6. Copy the generated token and use it as the `GH_PAT` value in your `.secrets` file
 
 **2.5 Prepare GitHub Secrets**
 ```bash

@@ -358,13 +358,14 @@ jobs:
           echo "TF_VAR_PREFIX=${TF_VAR_PREFIX}" >> $GITHUB_ENV
           echo "GITHUB_ORG=${GITHUB_ORG}" >> $GITHUB_ENV
           echo "GITHUB_REPO=${GITHUB_REPO}" >> $GITHUB_ENV
+          echo "GH_PAT=${GH_PAT}" >> $GITHUB_ENV
           
           # Create terraform.tfvars for Amplify
           cat <<EOF > infra/4-amplify/terraform.tfvars
           prefix = "${TF_VAR_PREFIX}"
           github_repository = "https://github.com/${GITHUB_ORG}/${GITHUB_REPO}"
           branch_name = "main"
-          github_access_token = "${{ secrets.GH_PAT }}"
+          github_access_token = "${GH_PAT}"
           EOF
 
       - name: Setup Terraform

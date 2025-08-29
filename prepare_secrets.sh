@@ -45,6 +45,7 @@ secrets_required_vars=(
   # GitHub Configuration
   "GITHUB_ORG"
   "GITHUB_REPO"
+  "GH_PAT"
   # AWS Configuration
   "AWS_REGION"
   "AWS_ACCOUNT_ID"
