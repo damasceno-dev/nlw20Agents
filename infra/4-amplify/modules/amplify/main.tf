@@ -67,7 +67,7 @@ resource "aws_amplify_app" "main" {
       phases:
         preBuild:
           commands:
-            - cd web
+            - cd $CODEBUILD_SRC_DIR/web
             - nvm use 20
             - npm ci
             # Generate API client from backend swagger if URL is available
@@ -87,7 +87,7 @@ resource "aws_amplify_app" "main" {
               fi
         build:
           commands:
-            - cd web
+            - cd $CODEBUILD_SRC_DIR/web
             - nvm use 20
             - npm run build
       artifacts:
@@ -124,7 +124,7 @@ resource "aws_amplify_app" "main" {
     Name        = "${var.prefix}-web-app"
     Project     = var.prefix
     Environment = "production"
-    BuildSpec   = "v4-node20-orval-safe" # Change this to force rebuild
+    BuildSpec   = "v5-absolute-paths" # Change this to force rebuild
   }
 }
 
