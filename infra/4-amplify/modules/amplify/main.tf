@@ -67,6 +67,7 @@ resource "aws_amplify_app" "main" {
       phases:
         preBuild:
           commands:
+            - cd web
             - npm ci
             # Generate API client from backend swagger if URL is available
             - |
@@ -78,14 +79,15 @@ resource "aws_amplify_app" "main" {
               fi
         build:
           commands:
+            - cd web
             - npm run build
       artifacts:
-        baseDirectory: .next
+        baseDirectory: web/.next
         files:
           - '**/*'
       cache:
         paths:
-          - node_modules/**/*
+          - web/node_modules/**/*
   EOT
 
   # Environment variables

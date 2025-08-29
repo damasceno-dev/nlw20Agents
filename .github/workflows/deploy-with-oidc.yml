@@ -342,6 +342,8 @@ jobs:
     runs-on: ubuntu-latest
     needs: [get_oidc_credentials, deploy_resources, deploy_server, deploy_app_runner]
     if: ${{ github.event.inputs.deploy_amplify != 'false' }}
+    outputs:
+      amplify_url: ${{ steps.get_amplify_url.outputs.amplify_url }}
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
@@ -424,11 +426,13 @@ jobs:
           terraform apply -auto-approve -var-file=terraform.tfvars
 
       - name: Retrieve Amplify URL
+        id: get_amplify_url
         working-directory: infra/4-amplify
         run: |
           AMPLIFY_APP_URL=$(terraform output -raw amplify_app_url)
           echo "Amplify App URL: ${AMPLIFY_APP_URL}"
           echo "AMPLIFY_APP_URL=${AMPLIFY_APP_URL}" >> $GITHUB_ENV
+          echo "amplify_url=${AMPLIFY_APP_URL}" >> $GITHUB_OUTPUT
 
   # ==========================================
   # FINAL SUMMARY
@@ -458,7 +462,12 @@ jobs:
           
           if [ "${{ needs.deploy_amplify.result }}" == "success" ]; then
             echo "### 🌐 Amplify Frontend Web App" >> $GITHUB_STEP_SUMMARY
-            echo "🔗 **Web Application**: Check Amplify console for URL" >> $GITHUB_STEP_SUMMARY
+            AMPLIFY_URL="${{ needs.deploy_amplify.outputs.amplify_url }}"
+            if [ -n "$AMPLIFY_URL" ]; then
+              echo "🔗 **Web Application**: https://${AMPLIFY_URL}" >> $GITHUB_STEP_SUMMARY
+            else
+              echo "🔗 **Web Application**: Check Amplify console for URL" >> $GITHUB_STEP_SUMMARY
+            fi
             echo "💡 **Note**: First deployment may take a few minutes to complete" >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
           fi
