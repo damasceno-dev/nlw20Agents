@@ -464,7 +464,7 @@ jobs:
             echo "### 🌐 Amplify Frontend Web App" >> $GITHUB_STEP_SUMMARY
             AMPLIFY_URL="${{ needs.deploy_amplify.outputs.amplify_url }}"
             if [ -n "$AMPLIFY_URL" ]; then
-              echo "🔗 **Web Application**: https://${AMPLIFY_URL}" >> $GITHUB_STEP_SUMMARY
+              echo "🔗 **Web Application**: ${AMPLIFY_URL}" >> $GITHUB_STEP_SUMMARY
             else
               echo "🔗 **Web Application**: Check Amplify console for URL" >> $GITHUB_STEP_SUMMARY
             fi
