@@ -5,21 +5,27 @@ import { CreateQuestionForm } from "@/components/create-question-form";
 import { Button } from "@/components/ui/button";
 
 interface RoomPageProps {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 }
 
 export default async function RoomPage({ params }: RoomPageProps) {
   // Await params before using its properties
   const { id } = await params;
 
-  const questionsFromServer = await getQuestionsRoomIdList(id);
-  const questions = questionsFromServer.sort((a, b) => {
-    const dateA = a.createdOn ? new Date(a.createdOn).getTime() : 0;
-    const dateB = b.createdOn ? new Date(b.createdOn).getTime() : 0;
-    return dateB - dateA;
-  });
-
-  const room = await getRoomsRoomIdGetbyid(id);
+  let questions: Awaited<ReturnType<typeof getQuestionsRoomIdList>> = [];
+  let room: Awaited<ReturnType<typeof getRoomsRoomIdGetbyid>> | null = null;
+  try {
+    const questionsFromServer = await getQuestionsRoomIdList(id);
+    questions = questionsFromServer.sort((a, b) => {
+      const dateA = a.createdOn ? new Date(a.createdOn).getTime() : 0;
+      const dateB = b.createdOn ? new Date(b.createdOn).getTime() : 0;
+      return dateB - dateA;
+    });
+    room = await getRoomsRoomIdGetbyid(id);
+  } catch (error) {
+    console.warn('Failed to fetch room data during build:', error);
+    // During build time or when API is unavailable, use empty defaults
+  }
 
   return (
     <div className="mt-10 min-h-screen p-4">
@@ -44,8 +50,8 @@ export default async function RoomPage({ params }: RoomPageProps) {
           </Button>
         </div>
         <div className="mb-6">
-          <h1 className="font-bold text-3xl">Sala {room.name || "Sala sem nome"}</h1>
-          {room.description && room.description.trim().length > 0 && (
+          <h1 className="font-bold text-3xl">Sala {room?.name || "Sala sem nome"}</h1>
+          {room?.description && room.description.trim().length > 0 && (
             <p className="text-gray-600">{room.description}</p>
           )}
         </div>

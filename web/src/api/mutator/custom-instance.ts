@@ -1,7 +1,7 @@
 import axios, { type AxiosRequestConfig, type Method } from 'axios';
 
 // Get the base URL from environment variables
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL;
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
 
 export const AXIOS_INSTANCE = axios.create({
     baseURL: API_BASE_URL,

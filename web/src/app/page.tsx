@@ -8,7 +8,13 @@ import { CreateRoomForm } from "@/components/create-room-form";
 
 
 export default async function CreateRoomPage() {
-    const rooms = await getRoomsList();
+    let rooms: Awaited<ReturnType<typeof getRoomsList>> = [];
+    try {
+        rooms = await getRoomsList();
+    } catch (error) {
+        console.warn('Failed to fetch rooms during build:', error);
+        // During build time or when API is unavailable, use empty array
+    }
 
     return (
         <div className="min-h-screen p-4">
