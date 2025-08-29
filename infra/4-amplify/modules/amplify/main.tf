@@ -57,17 +57,18 @@ resource "aws_iam_role_policy_attachment" "amplify_policy_attachment" {
 # Amplify App
 resource "aws_amplify_app" "main" {
   name         = "${var.prefix}-web-app"
-  description  = "Next.js frontend with API integration - Updated ${formatdate("YYYY-MM-DD hh:mm", timestamp())}"
+  description  = "Next.js frontend with API integration - Force Update ${formatdate("YYYY-MM-DD hh:mm:ss", timestamp())}"
   repository   = var.github_repository
   access_token = var.github_access_token
 
-  # Build settings for Next.js with orval API generation
+  # Build settings for Next.js with orval API generation - UPDATED WITH DEBUG
   build_spec = <<-EOT
     version: 1
     frontend:
       phases:
         preBuild:
           commands:
+            - echo "=== DEBUG: AMPLIFY BUILD SPEC UPDATED $(date) ==="
             - echo "Current directory:" && pwd
             - echo "Directory contents:" && ls -la
             - echo "Looking for web directory..." && find . -name "web" -type d
