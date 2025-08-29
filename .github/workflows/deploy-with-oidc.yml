@@ -445,14 +445,21 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           
           if [ "${{ needs.deploy_app_runner.result }}" == "success" ]; then
-            echo "### 🚀 App Runner URL" >> $GITHUB_STEP_SUMMARY
-            echo "🔗 Backend API: App Runner deployed successfully" >> $GITHUB_STEP_SUMMARY
+            echo "### 🚀 App Runner Backend API" >> $GITHUB_STEP_SUMMARY
+            APP_RUNNER_URL="${{ needs.deploy_app_runner.outputs.app_runner_url }}"
+            if [ -n "$APP_RUNNER_URL" ]; then
+              echo "🔗 **Backend API**: https://${APP_RUNNER_URL}" >> $GITHUB_STEP_SUMMARY
+              echo "📊 **Swagger API Docs**: https://${APP_RUNNER_URL}/swagger" >> $GITHUB_STEP_SUMMARY
+            else
+              echo "🔗 Backend API: Deployed successfully" >> $GITHUB_STEP_SUMMARY
+            fi
             echo "" >> $GITHUB_STEP_SUMMARY
           fi
           
           if [ "${{ needs.deploy_amplify.result }}" == "success" ]; then
-            echo "### 🌐 Amplify URL" >> $GITHUB_STEP_SUMMARY
-            echo "🔗 Frontend Web App: Amplify deployed successfully" >> $GITHUB_STEP_SUMMARY
+            echo "### 🌐 Amplify Frontend Web App" >> $GITHUB_STEP_SUMMARY
+            echo "🔗 **Web Application**: Check Amplify console for URL" >> $GITHUB_STEP_SUMMARY
+            echo "💡 **Note**: First deployment may take a few minutes to complete" >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
           fi
           
@@ -460,3 +467,17 @@ jobs:
           echo "- No AWS credentials stored in GitHub" >> $GITHUB_STEP_SUMMARY
           echo "- Temporary credentials (1 hour TTL)" >> $GITHUB_STEP_SUMMARY
           echo "- Automatic credential rotation" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          echo "### 🧹 Next Steps: Clean Up Temporary Secrets" >> $GITHUB_STEP_SUMMARY
+          echo "Your deployment is complete! You can now safely remove temporary AWS credentials:" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`bash" >> $GITHUB_STEP_SUMMARY
+          echo "# Remove temporary AWS credentials (no longer needed)" >> $GITHUB_STEP_SUMMARY
+          echo "rm .initial_secrets" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "# Remove encoded secret files (if still present)" >> $GITHUB_STEP_SUMMARY
+          echo "rm -f .initial_secrets.b64 .secrets.b64" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "⚠️ **Important**: Keep your \`.secrets\` file safe - it contains your permanent project configuration!" >> $GITHUB_STEP_SUMMARY
