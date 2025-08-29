@@ -86,6 +86,11 @@ resource "aws_amplify_app" "main" {
                 if curl -f -s "$SWAGGER_URL" > /dev/null; then
                   echo "Swagger endpoint is accessible, generating API client..."
                   npm run generate-api:prod
+                  echo "API generation completed. Checking generated files:"
+                  ls -la src/api/generated/ || echo "API generation directory not found"
+                  echo "Verifying serverAPI files exist:"
+                  test -f src/api/generated/serverAPI.ts && echo "✓ serverAPI.ts exists" || echo "✗ serverAPI.ts missing"
+                  test -f src/api/generated/serverAPI.schemas.ts && echo "✓ serverAPI.schemas.ts exists" || echo "✗ serverAPI.schemas.ts missing"
                 else
                   echo "Warning: Swagger endpoint not accessible yet, skipping API generation"
                   echo "The app will still build but without backend integration"
@@ -99,6 +104,11 @@ resource "aws_amplify_app" "main" {
             - echo "Looking for web directory in build phase:" && ls -la
             - cd $CODEBUILD_SRC_DIR/nlw20Agents/web
             - nvm use 20
+            - echo "Pre-build verification - checking required files:"
+            - echo "Components directory:" && ls -la src/components/ui/ || echo "UI components missing"
+            - echo "Providers directory:" && ls -la src/providers/ || echo "Providers missing"  
+            - echo "API generated directory:" && ls -la src/api/generated/ || echo "Generated API missing"
+            - echo "Generated API files:" && ls -la src/api/generated/*.ts || echo "No API files found"
             - npm run build
       artifacts:
         baseDirectory: web/.next
