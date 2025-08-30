@@ -6,7 +6,7 @@
     "dev": "next dev --turbopack",
     "dev:https": "dotenv -e .env.development.https -- next dev --turbopack",
     "dev:prod": "dotenv -e .env.production         -- next start",
-    "build": "amplify-next build",
+    "build": "npx amplify-next build",
     "start": "next start",
     "lint": "next lint",
     "biome:check": "biome check .",
