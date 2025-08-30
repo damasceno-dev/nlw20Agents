@@ -7,31 +7,16 @@ frontend:
         - nvm use 20
         - npm ci --include=dev
         - |
-          echo "=== Checking for Amplify adapter ==="
-          ls -la node_modules/@aws-amplify/ || echo "No @aws-amplify directory found"
-          npm list @aws-amplify/adapter-nextjs || echo "Adapter not in npm list"
-          echo "=== Package.json devDependencies ==="
-          cat package.json | grep -A 20 '"devDependencies"' || echo "No devDependencies section"
-        - |
           if [ -n "$SWAGGER_URL" ]; then
             curl -f -s "$SWAGGER_URL" > /dev/null && npm run generate-api:prod || echo "Swagger not accessible"
           fi
     build:
       commands:
-        - |
-          echo "=== Attempting build ==="
-          if [ -d "node_modules/@aws-amplify/adapter-nextjs" ]; then
-            echo "Adapter found, using adapter build"
-            npx @aws-amplify/adapter-nextjs@latest build
-          else
-            echo "Adapter not found, using standard Next.js build"
-            npm run build
-          fi
+        - npm run build
   artifacts:
-    baseDirectory: web/.next
+    baseDirectory: web
     files:
       - '**/*'
   cache:
     paths:
       - web/node_modules/**/*
-      - web/.next/cache/**/*

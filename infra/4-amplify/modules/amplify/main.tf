@@ -75,13 +75,6 @@ resource "aws_amplify_app" "main" {
   # IAM role
   iam_service_role_arn = aws_iam_role.amplify_role.arn
 
-  # Custom rules for SPA routing
-  custom_rule {
-    source = "/<*>"
-    status = "404-200"
-    target = "/index.html"
-  }
-
   tags = {
     Name        = "${var.prefix}-web-app"
     Project     = var.prefix
