@@ -77,7 +77,7 @@ resource "aws_amplify_app" "main" {
             - 'echo "Repository info:" && git remote -v'
             - cd web
             - nvm use 20
-            - npm ci --include=dev
+            - npm install --include=dev
             # Generate API client from backend swagger if URL is available
             - |
               if [ -n "$SWAGGER_URL" ] && [ "$SWAGGER_URL" != "" ]; then
@@ -102,13 +102,15 @@ resource "aws_amplify_app" "main" {
           commands:
             - echo "Build phase - Current directory:" && pwd
             - echo "Looking for web directory in build phase:" && ls -la
-            - cd $CODEBUILD_SRC_DIR/nlw20Agents/web
+            - cd web
             - nvm use 20
             - echo "Pre-build verification - checking required files:"
             - echo "Components directory:" && ls -la src/components/ui/ || echo "UI components missing"
-            - echo "Providers directory:" && ls -la src/providers/ || echo "Providers missing"  
+            - echo "Providers directory:" && ls -la src/providers/ || echo "Providers missing"
             - echo "API generated directory:" && ls -la src/api/generated/ || echo "Generated API missing"
             - echo "Generated API files:" && ls -la src/api/generated/*.ts || echo "No API files found"
+            - echo "node_modules/.bin listing:" && ls -la node_modules/.bin || true
+            - echo "which amplify-next:" && which amplify-next || true
             - npm run build
       artifacts:
         baseDirectory: web/.next
