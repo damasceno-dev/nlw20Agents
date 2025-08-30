@@ -14,6 +14,13 @@ const deployManifest = {
   version: 1,
   routes: [
     {
+      path: "/_next/static/*",
+      target: {
+        kind: "Static",
+        src: "compute/default/web/.next/static"
+      }
+    },
+    {
       path: "/*",
       target: {
         kind: "Compute",
@@ -59,6 +66,16 @@ if (fs.existsSync(standalonePath)) {
     const destStaticPath = path.join(computePath, 'web', '.next', 'static');
     fs.mkdirSync(path.dirname(destStaticPath), { recursive: true });
     fs.cpSync(staticPath, destStaticPath, { recursive: true });
+    console.log('✅ Copied static files');
+  }
+  
+  // Copy CSS files from .next/server/pages to ensure they're available
+  const serverPagesPath = path.join(process.cwd(), '.next', 'server', 'app');
+  if (fs.existsSync(serverPagesPath)) {
+    const destServerPath = path.join(computePath, 'web', '.next', 'server', 'app');
+    fs.mkdirSync(path.dirname(destServerPath), { recursive: true });
+    fs.cpSync(serverPagesPath, destServerPath, { recursive: true });
+    console.log('✅ Copied server app files');
   }
   
   // Copy public directory
