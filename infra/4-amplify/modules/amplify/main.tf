@@ -78,7 +78,6 @@ resource "aws_amplify_app" "main" {
             - cd web
             - nvm use 20
             - npm install --include=dev
-            - npm install @aws-amplify/next
             # Generate API client from backend swagger if URL is available
             - |
               if [ -n "$SWAGGER_URL" ] && [ "$SWAGGER_URL" != "" ]; then
