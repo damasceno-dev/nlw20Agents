@@ -14,6 +14,7 @@ frontend:
       commands:
         - npm run build
   artifacts:
+    # AWS Amplify with WEB_COMPUTE platform expects the entire web directory
     baseDirectory: web
     files:
       - '**/*'
