@@ -57,7 +57,7 @@ resource "aws_iam_role_policy_attachment" "amplify_policy_attachment" {
 # Amplify App
 resource "aws_amplify_app" "main" {
   name         = "${var.prefix}-web-app"
-  description  = "Next.js frontend with API integration - Static File Routing ${formatdate("YYYY-MM-DD hh:mm:ss", timestamp())}"
+  description  = "Next.js frontend with API integration - Simple Routing ${formatdate("YYYY-MM-DD hh:mm:ss", timestamp())}"
   repository   = var.github_repository
   access_token = var.github_access_token
   
@@ -112,7 +112,7 @@ resource "aws_amplify_app" "main" {
     Name        = "${var.prefix}-web-app"
     Project     = var.prefix
     Environment = "production"
-    BuildSpec   = "v13-static-files-${formatdate("YYYYMMDD-hhmm", timestamp())}" # Force rebuild with timestamp
+    BuildSpec   = "v14-simple-routing-${formatdate("YYYYMMDD-hhmm", timestamp())}" # Force rebuild with timestamp
   }
 }
 

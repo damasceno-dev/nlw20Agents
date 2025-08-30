@@ -14,13 +14,6 @@ const deployManifest = {
   version: 1,
   routes: [
     {
-      path: "/_next/static/*",
-      target: {
-        kind: "Static",
-        src: "compute/default/web/.next/static"
-      }
-    },
-    {
       path: "/*",
       target: {
         kind: "Compute",
