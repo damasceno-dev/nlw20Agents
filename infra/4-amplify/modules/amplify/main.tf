@@ -102,7 +102,7 @@ resource "aws_amplify_app" "main" {
           commands:
             - echo "Build phase - Current directory:" && pwd
             - echo "Looking for web directory in build phase:" && ls -la
-            - cd web
+            - cd $CODEBUILD_SRC_DIR/nlw20Agents/web
             - nvm use 20
             - echo "Pre-build verification - checking required files:"
             - echo "Components directory:" && ls -la src/components/ui/ || echo "UI components missing"
