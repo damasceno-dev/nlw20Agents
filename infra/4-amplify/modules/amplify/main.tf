@@ -77,7 +77,7 @@ resource "aws_amplify_app" "main" {
             - 'echo "Repository info:" && git remote -v'
             - cd web
             - nvm use 20
-            - npm ci
+            - npm ci --include=dev
             # Generate API client from backend swagger if URL is available
             - |
               if [ -n "$SWAGGER_URL" ] && [ "$SWAGGER_URL" != "" ]; then
