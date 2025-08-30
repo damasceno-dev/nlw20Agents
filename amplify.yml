@@ -5,25 +5,18 @@ frontend:
       commands:
         - cd web
         - nvm use 20
-        - npm install --include=dev
+        - npm ci
         - |
-          if [ -n "$SWAGGER_URL" ] && [ "$SWAGGER_URL" != "" ]; then
-            echo "Generating API client from: $SWAGGER_URL"
-            if curl -f -s "$SWAGGER_URL" > /dev/null; then
-              npm run generate-api:prod
-            else
-              echo "Warning: Swagger endpoint not accessible, skipping API generation"
-            fi
+          if [ -n "$SWAGGER_URL" ]; then
+            curl -f -s "$SWAGGER_URL" > /dev/null && npm run generate-api:prod || echo "Swagger not accessible"
           fi
     build:
       commands:
-        - npm run build
+        - npx @aws-amplify/adapter-nextjs@latest build
   artifacts:
-    # Let Amplify auto-detect Next.js build output
-    baseDirectory: .next
+    baseDirectory: web/.amplify-hosting
     files:
       - '**/*'
   cache:
     paths:
-      - node_modules/**/*
-      - .next/cache/**/*
+      - web/node_modules/**/*
