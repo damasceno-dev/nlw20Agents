@@ -25,7 +25,7 @@ const deployManifest = {
     {
       name: "default",
       runtime: "nodejs20.x",
-      entrypoint: "compute/default/server.js"
+      entrypoint: "server.js"
     }
   ],
   framework: {
