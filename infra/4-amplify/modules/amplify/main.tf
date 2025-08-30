@@ -57,7 +57,7 @@ resource "aws_iam_role_policy_attachment" "amplify_policy_attachment" {
 # Amplify App
 resource "aws_amplify_app" "main" {
   name         = "${var.prefix}-web-app"
-  description  = "Next.js frontend with API integration - Force Update ${formatdate("YYYY-MM-DD hh:mm:ss", timestamp())}"
+  description  = "Next.js frontend with API integration - Debug Update ${formatdate("YYYY-MM-DD hh:mm:ss", timestamp())}"
   repository   = var.github_repository
   access_token = var.github_access_token
 
@@ -109,6 +109,20 @@ resource "aws_amplify_app" "main" {
             - echo "Providers directory:" && ls -la src/providers/ || echo "Providers missing"  
             - echo "API generated directory:" && ls -la src/api/generated/ || echo "Generated API missing"
             - echo "Generated API files:" && ls -la src/api/generated/*.ts || echo "No API files found"
+            - echo "=== PATH RESOLUTION DEBUG ==="
+            - echo "Current working directory after cd:" && pwd
+            - echo "Current directory structure:" && ls -la
+            - echo "Source directory structure:" && find src -type f -name "*.tsx" -o -name "*.ts" | head -10
+            - echo "Checking tsconfig.json exists:" && ls -la tsconfig.json
+            - echo "tsconfig.json content:" && cat tsconfig.json
+            - echo "Testing path resolution - checking if @ paths exist:"
+            - echo "Testing @/components/ui/button:" && ls -la src/components/ui/button.tsx || echo "❌ button.tsx not found"
+            - echo "Testing @/api/generated/serverAPI:" && ls -la src/api/generated/serverAPI.ts || echo "❌ serverAPI.ts not found" 
+            - echo "Testing @/providers/query-provider:" && ls -la src/providers/query-provider.tsx || echo "❌ query-provider.tsx not found"
+            - echo "Next.js config check:" && ls -la next.config.* || echo "No Next.js config found"
+            - echo "Package.json scripts:" && cat package.json | grep -A5 -B5 "scripts"
+            - echo "Node and NPM versions:" && node --version && npm --version
+            - echo "=== END PATH DEBUG ==="
             - npm run build
       artifacts:
         baseDirectory: web/.next
@@ -144,7 +158,7 @@ resource "aws_amplify_app" "main" {
     Name        = "${var.prefix}-web-app"
     Project     = var.prefix
     Environment = "production"
-    BuildSpec   = "v6-force-deploy-${formatdate("YYYYMMDD-hhmm", timestamp())}" # Force rebuild with timestamp
+    BuildSpec   = "v7-debug-deploy-${formatdate("YYYYMMDD-hhmm", timestamp())}" # Force rebuild with timestamp
   }
 }
 
