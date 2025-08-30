@@ -18,6 +18,7 @@ frontend:
         - ls -la .next || echo "No .next directory"
         - ls -la .amplify-hosting || echo "No .amplify-hosting directory"
         - find . -name "deploy-manifest.json" -type f || echo "No deploy-manifest.json found"
+        - cat .amplify-hosting/deploy-manifest.json || echo "Could not read deploy-manifest.json"
   artifacts:
     # AWS Amplify adapter creates deployment artifacts in .amplify-hosting
     baseDirectory: web/.amplify-hosting
