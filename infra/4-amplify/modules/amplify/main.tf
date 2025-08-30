@@ -60,67 +60,7 @@ resource "aws_amplify_app" "main" {
   description  = "Next.js frontend with API integration - Fixed Package-lock.json Paths ${formatdate("YYYY-MM-DD hh:mm:ss", timestamp())}"
   repository   = var.github_repository
   access_token = var.github_access_token
-
-  # Build settings for Next.js with orval API generation - UPDATED WITH DEBUG
-  build_spec = <<-EOT
-    version: 1
-    frontend:
-      phases:
-        preBuild:
-          commands:
-            - 'echo "=== DEBUG: AMPLIFY BUILD SPEC UPDATED ==="'
-            - 'echo "Current directory:" && pwd'
-            - 'echo "Directory contents:" && ls -la'
-            - 'echo "Looking for web directory..." && find . -name "web" -type d'
-            - 'echo "Git status:" && git status'
-            - 'echo "Current commit:" && git rev-parse HEAD'
-            - 'echo "Repository info:" && git remote -v'
-            - cd web
-            - nvm use 20
-            - npm install --include=dev
-            # Generate API client from backend swagger if URL is available
-            - |
-              if [ -n "$SWAGGER_URL" ] && [ "$SWAGGER_URL" != "" ]; then
-                echo "Generating API client from: $SWAGGER_URL"
-                # Test if the swagger URL is accessible before running orval
-                if curl -f -s "$SWAGGER_URL" > /dev/null; then
-                  echo "Swagger endpoint is accessible, generating API client..."
-                  npm run generate-api:prod
-                  echo "API generation completed. Checking generated files:"
-                  ls -la src/api/generated/ || echo "API generation directory not found"
-                  echo "Verifying serverAPI files exist:"
-                  test -f src/api/generated/serverAPI.ts && echo "✓ serverAPI.ts exists" || echo "✗ serverAPI.ts missing"
-                  test -f src/api/generated/serverAPI.schemas.ts && echo "✓ serverAPI.schemas.ts exists" || echo "✗ serverAPI.schemas.ts missing"
-                else
-                  echo "Warning: Swagger endpoint not accessible yet, skipping API generation"
-                  echo "The app will still build but without backend integration"
-                fi
-              else
-                echo "No SWAGGER_URL provided, skipping API generation"
-              fi
-        build:
-          commands:
-            - echo "Build phase - Current directory:" && pwd
-            - echo "Looking for web directory in build phase:" && ls -la
-            - cd $CODEBUILD_SRC_DIR/nlw20Agents/web
-            - nvm use 20
-            - echo "Pre-build verification - checking required files:"
-            - echo "Components directory:" && ls -la src/components/ui/ || echo "UI components missing"
-            - echo "Providers directory:" && ls -la src/providers/ || echo "Providers missing"
-            - echo "API generated directory:" && ls -la src/api/generated/ || echo "Generated API missing"
-            - echo "Generated API files:" && ls -la src/api/generated/*.ts || echo "No API files found"
-            - echo "node_modules/.bin listing:" && ls -la node_modules/.bin || true
-            - echo "which amplify-next:" && which amplify-next || true
-            - npm run build
-      artifacts:
-        baseDirectory: web/.next
-        files:
-          - '**/*'
-      cache:
-        paths:
-          - web/node_modules/**/*
-  EOT
-
+  
   # Environment variables
   environment_variables = var.environment_variables
 

@@ -1,0 +1,21 @@
+version: 1
+frontend:
+  phases:
+    preBuild:
+      commands:
+        - cd web
+        - npm install
+        - |
+          if [ -n "$SWAGGER_URL" ]; then
+            curl -f -s "$SWAGGER_URL" > /dev/null && npm run generate-api:prod || echo "Swagger not accessible"
+          fi
+    build:
+      commands:
+        - npm run build
+  artifacts:
+    baseDirectory: .next
+    files:
+      - '**/*'
+  cache:
+    paths:
+      - node_modules/**/*
