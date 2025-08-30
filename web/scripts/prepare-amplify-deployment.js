@@ -25,10 +25,7 @@ const deployManifest = {
     {
       name: "default",
       runtime: "nodejs20.x",
-      entrypoint: "server.js",
-      buildFiles: [
-        "**/*"
-      ]
+      entrypoint: "compute/default/server.js"
     }
   ],
   framework: {
@@ -44,23 +41,22 @@ fs.writeFileSync(
 
 console.log('✅ Created deploy-manifest.json');
 
+// Create compute directory
+const computePath = path.join(amplifyHostingPath, 'compute', 'default');
+fs.mkdirSync(computePath, { recursive: true });
+
 // Copy standalone build output
 const standalonePath = path.join(process.cwd(), '.next', 'standalone');
 if (fs.existsSync(standalonePath)) {
   console.log('📁 Found standalone build, copying files...');
   
-  // Copy the entire standalone directory contents (not the directory itself)
-  const standaloneContents = fs.readdirSync(standalonePath);
-  standaloneContents.forEach(item => {
-    const srcPath = path.join(standalonePath, item);
-    const destPath = path.join(amplifyHostingPath, item);
-    fs.cpSync(srcPath, destPath, { recursive: true });
-  });
+  // Copy the entire standalone directory to compute/default
+  fs.cpSync(standalonePath, computePath, { recursive: true });
   
   // Copy static files
   const staticPath = path.join(process.cwd(), '.next', 'static');
   if (fs.existsSync(staticPath)) {
-    const destStaticPath = path.join(amplifyHostingPath, 'web', '.next', 'static');
+    const destStaticPath = path.join(computePath, 'web', '.next', 'static');
     fs.mkdirSync(path.dirname(destStaticPath), { recursive: true });
     fs.cpSync(staticPath, destStaticPath, { recursive: true });
   }
@@ -68,18 +64,18 @@ if (fs.existsSync(standalonePath)) {
   // Copy public directory
   const publicPath = path.join(process.cwd(), 'public');
   if (fs.existsSync(publicPath)) {
-    const destPublicPath = path.join(amplifyHostingPath, 'web', 'public');
+    const destPublicPath = path.join(computePath, 'web', 'public');
     fs.mkdirSync(path.dirname(destPublicPath), { recursive: true });
     fs.cpSync(publicPath, destPublicPath, { recursive: true });
   }
   
-  // Verify server.js exists at the root
-  const serverJsPath = path.join(amplifyHostingPath, 'server.js');
+  // Ensure server.js exists in compute/default
+  const serverJsPath = path.join(computePath, 'server.js');
   if (!fs.existsSync(serverJsPath)) {
-    console.log('⚠️  server.js not found at root, looking for it...');
-    const webServerJs = path.join(amplifyHostingPath, 'web', 'server.js');
+    console.log('⚠️  server.js not found, looking for it...');
+    const webServerJs = path.join(computePath, 'web', 'server.js');
     if (fs.existsSync(webServerJs)) {
-      console.log('📋 Moving server.js to root...');
+      console.log('📋 Moving server.js to compute/default root...');
       fs.copyFileSync(webServerJs, serverJsPath);
     }
   }
@@ -87,6 +83,8 @@ if (fs.existsSync(standalonePath)) {
   console.log('✅ Copied standalone build files');
   console.log('📁 .amplify-hosting structure:');
   console.log(fs.readdirSync(amplifyHostingPath).join('\n'));
+  console.log('📁 compute/default structure:');
+  console.log(fs.readdirSync(computePath).join('\n'));
 } else {
   console.log('❌ No standalone build found. Make sure output: "standalone" is set in next.config.js');
 }

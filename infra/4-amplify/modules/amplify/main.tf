@@ -57,7 +57,7 @@ resource "aws_iam_role_policy_attachment" "amplify_policy_attachment" {
 # Amplify App
 resource "aws_amplify_app" "main" {
   name         = "${var.prefix}-web-app"
-  description  = "Next.js frontend with API integration - Complete Deploy Manifest ${formatdate("YYYY-MM-DD hh:mm:ss", timestamp())}"
+  description  = "Next.js frontend with API integration - Compute Directory Structure ${formatdate("YYYY-MM-DD hh:mm:ss", timestamp())}"
   repository   = var.github_repository
   access_token = var.github_access_token
   
@@ -96,6 +96,7 @@ resource "aws_amplify_app" "main" {
             - ls -la
             - ls -la .next || echo "No .next directory"
             - ls -la .amplify-hosting || echo "No .amplify-hosting directory"
+            - ls -la .amplify-hosting/compute/default || echo "No compute/default directory"
             - find . -name "deploy-manifest.json" -type f || echo "No deploy-manifest.json found"
             - cat .amplify-hosting/deploy-manifest.json || echo "Could not read deploy-manifest.json"
       artifacts:
@@ -111,7 +112,7 @@ resource "aws_amplify_app" "main" {
     Name        = "${var.prefix}-web-app"
     Project     = var.prefix
     Environment = "production"
-    BuildSpec   = "v10-manifest-${formatdate("YYYYMMDD-hhmm", timestamp())}" # Force rebuild with timestamp
+    BuildSpec   = "v11-compute-dir-${formatdate("YYYYMMDD-hhmm", timestamp())}" # Force rebuild with timestamp
   }
 }
 

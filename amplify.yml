@@ -17,6 +17,7 @@ frontend:
         - ls -la
         - ls -la .next || echo "No .next directory"
         - ls -la .amplify-hosting || echo "No .amplify-hosting directory"
+        - ls -la .amplify-hosting/compute/default || echo "No compute/default directory"
         - find . -name "deploy-manifest.json" -type f || echo "No deploy-manifest.json found"
         - cat .amplify-hosting/deploy-manifest.json || echo "Could not read deploy-manifest.json"
   artifacts:
