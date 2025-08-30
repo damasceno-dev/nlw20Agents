@@ -75,11 +75,42 @@ resource "aws_amplify_app" "main" {
   # IAM role
   iam_service_role_arn = aws_iam_role.amplify_role.arn
 
+  # Build spec inline for better control
+  build_spec = <<-EOT
+    version: 1
+    frontend:
+      phases:
+        preBuild:
+          commands:
+            - cd web
+            - nvm use 20
+            - npm ci --include=dev
+            - |
+              if [ -n "$SWAGGER_URL" ]; then
+                curl -f -s "$SWAGGER_URL" > /dev/null && npm run generate-api:prod || echo "Swagger not accessible"
+              fi
+        build:
+          commands:
+            - npm run build:amplify
+            # Debug: Check what files are created
+            - ls -la
+            - ls -la .next || echo "No .next directory"
+            - ls -la .amplify-hosting || echo "No .amplify-hosting directory"
+            - find . -name "deploy-manifest.json" -type f || echo "No deploy-manifest.json found"
+      artifacts:
+        baseDirectory: web/.amplify-hosting
+        files:
+          - '**/*'
+      cache:
+        paths:
+          - web/node_modules/**/*
+  EOT
+
   tags = {
     Name        = "${var.prefix}-web-app"
     Project     = var.prefix
     Environment = "production"
-    BuildSpec   = "v8-debug-deploy-${formatdate("YYYYMMDD-hhmm", timestamp())}" # Force rebuild with timestamp
+    BuildSpec   = "v9-adapter-${formatdate("YYYYMMDD-hhmm", timestamp())}" # Force rebuild with timestamp
   }
 }
 

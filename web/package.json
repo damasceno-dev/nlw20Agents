@@ -7,7 +7,7 @@
     "dev:https": "dotenv -e .env.development.https -- next dev --turbopack",
     "dev:prod": "dotenv -e .env.production         -- next start",
     "build": "next build",
-    "build:amplify": "next build && node -e \"console.log('Build completed for Amplify')\"",
+    "build:amplify": "next build && node scripts/prepare-amplify-deployment.js",
     "start": "next start",
     "lint": "next lint",
     "biome:check": "biome check .",

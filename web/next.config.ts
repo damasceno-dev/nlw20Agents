@@ -10,8 +10,8 @@ const nextConfig: NextConfig = {
     };
     return config;
   },
-  // AWS Amplify now has native Next.js support
-  // No special output configuration needed
+  // AWS Amplify WEB_COMPUTE requires standalone output
+  output: 'standalone',
 };
 
 export default nextConfig;
