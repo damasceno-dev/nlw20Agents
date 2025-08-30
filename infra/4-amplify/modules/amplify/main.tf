@@ -111,10 +111,9 @@ resource "aws_amplify_app" "main" {
             - echo "Generated API files:" && ls -la src/api/generated/*.ts || echo "No API files found"
             - npm run build
       artifacts:
-        baseDirectory: web
+        baseDirectory: web/.next
         files:
-          - '.next/**/*'
-          - '.amplify-hosting/**/*'
+          - '**/*'
       cache:
         paths:
           - web/node_modules/**/*
