@@ -11,15 +11,17 @@ public static class ApiDependencyInjection
     public static void AddApi(this IServiceCollection services, IWebHostEnvironment environment)
     {
         // Add CORS
-        services.AddCors((serviceProvider, options) =>
-        {
-            var config = serviceProvider.GetRequiredService<IConfiguration>();
-            var allowedOriginsFromConfig = config["Cors:AllowedOrigins"] ?? string.Empty;
-            var allowedOrigins = allowedOriginsFromConfig
-                .Split(new[] { ',', ';', ' ' }, System.StringSplitOptions.RemoveEmptyEntries)
-                .Select(o => o.Trim())
-                .ToArray();
+        // Resolve IConfiguration from a temporary ServiceProvider built from current services
+        using var sp = services.BuildServiceProvider();
+        var config = sp.GetRequiredService<IConfiguration>();
+        var allowedOriginsFromConfig = config["Cors:AllowedOrigins"] ?? string.Empty;
+        var allowedOrigins = allowedOriginsFromConfig
+            .Split(new[] { ',', ';', ' ' }, System.StringSplitOptions.RemoveEmptyEntries)
+            .Select(o => o.Trim())
+            .ToArray();
 
+        services.AddCors(options =>
+        {
             options.AddPolicy("AllowFrontend", policy =>
             {
                 if (environment.IsDevelopment())
@@ -50,8 +52,9 @@ public static class ApiDependencyInjection
                     }
                     else
                     {
-                        // Default to no external origins to avoid open CORS
-                        policy.WithOrigins()
+                        // Default to deny all external origins to avoid open CORS when none are configured
+                        policy
+                            .SetIsOriginAllowed(_ => false)
                             .AllowAnyHeader()
                             .AllowAnyMethod();
                     }
