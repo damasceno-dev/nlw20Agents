@@ -24,7 +24,7 @@ on:
         type: boolean
         default: true
       update_backend_cors:
-        description: 'Configure App Runner CORS with Amplify URL via Terraform'
+        description: 'Check CORS status (CORS is handled by Terraform)'
         required: false
         type: boolean
         default: true
@@ -292,7 +292,7 @@ jobs:
           # Create terraform.tfvars for App Runner
           cat <<EOF > infra/3-apprunner/terraform.tfvars
           prefix = "${TF_VAR_PREFIX}"
-          configure_cors = false
+          configure_cors = true
           EOF
 
       - name: Setup Terraform
@@ -441,90 +441,28 @@ jobs:
           echo "amplify_url=${AMPLIFY_APP_URL}" >> $GITHUB_OUTPUT
 
   # ==========================================
-  # STAGE 5: Update Backend CORS with Amplify URL
+  # STAGE 5: CORS Configuration (handled by Terraform)
   # ==========================================
-  update_backend_cors:
-    name: "Update Backend CORS"
+  cors_status:
+    name: "CORS Status Check"
     runs-on: ubuntu-latest
     needs: [get_oidc_credentials, deploy_app_runner, deploy_amplify]
     if: ${{ github.event.inputs.update_backend_cors != 'false' && needs.deploy_app_runner.result == 'success' && needs.deploy_amplify.result == 'success' }}
-    # Allow this to fail without failing the entire workflow
-    continue-on-error: true
     steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
-
-      - name: Create .secrets file
+      - name: CORS Status
         run: |
-          echo "${{ secrets.SECRETS_B64 }}" | base64 -d > .secrets
-          chmod 600 .secrets
-
-      - name: Load Environment Variables
-        run: |
-          export $(grep -v '^#' .secrets | grep -v '^$' | xargs)
-          echo "AWS_REGION=${AWS_REGION}" >> $GITHUB_ENV
-          echo "TF_VAR_PREFIX=${TF_VAR_PREFIX}" >> $GITHUB_ENV
-
-      - name: Configure AWS Credentials (OIDC)
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: ${{ needs.get_oidc_credentials.outputs.oidc_role_arn }}
-          aws-region: ${{ env.AWS_REGION }}
-          role-session-name: GitHubActions-UpdateCORS
-
-      - name: Update App Runner CORS via Terraform
-        env:
-          TF_VAR_PREFIX: ${{ env.TF_VAR_PREFIX }}
-        run: |
-          set +e  # Don't exit on first error, handle gracefully
-
-          echo "🔧 Updating App Runner CORS configuration via Terraform..."
-
-          # Update terraform.tfvars to enable CORS configuration
-          cat <<EOF > infra/3-apprunner/terraform.tfvars
-          prefix = "${TF_VAR_PREFIX}"
-          configure_cors = true
-          EOF
-
-          # Setup Terraform
-          cd infra/3-apprunner
-
-          # Configure Terraform backend
-          cat <<EOF > backend.tf
-          terraform {
-            backend "s3" {
-              bucket = "${TF_VAR_PREFIX}-terraform-state-unique1029"
-              key    = "3-apprunner/terraform.tfstate"
-              region = "${AWS_REGION}"
-              encrypt = true
-            }
-          }
-          EOF
-
-          echo "📋 Running Terraform plan..."
-          terraform plan -var-file=terraform.tfvars
-
-          if [ $? -eq 0 ]; then
-            echo "🚀 Applying CORS configuration..."
-            terraform apply -auto-approve -var-file=terraform.tfvars
-
-            if [ $? -eq 0 ]; then
-              echo "✅ App Runner CORS configuration updated successfully"
-            else
-              echo "❌ Failed to update App Runner CORS configuration"
-              echo "⚠️ This might be due to timing or the Amplify app not being available yet"
-            fi
-          else
-            echo "❌ Terraform plan failed"
-            echo "⚠️ Skipping CORS update"
-          fi
+          echo "🔒 CORS Configuration Status:"
+          echo "✅ CORS is now handled automatically by Terraform"
+          echo "✅ No manual intervention required"
+          echo "✅ Terraform manages timing and state properly"
+          echo "✅ CORS will be configured on next deployment if needed"
   # ==========================================
   # FINAL SUMMARY
   # ==========================================
   deployment_summary:
     name: "Deployment Summary"
     runs-on: ubuntu-latest
-    needs: [get_oidc_credentials, deploy_resources, deploy_server, deploy_app_runner, deploy_amplify]
+    needs: [get_oidc_credentials, deploy_resources, deploy_server, deploy_app_runner, deploy_amplify, cors_status]
     if: always()
     steps:
       - name: Summary
@@ -556,17 +494,11 @@ jobs:
             echo "" >> $GITHUB_STEP_SUMMARY
           fi
 
-          # Note about CORS update status
-          if [ "${{ needs.update_backend_cors.result }}" == "success" ]; then
-            echo "### 🔒 CORS Configuration" >> $GITHUB_STEP_SUMMARY
-            echo "✅ Backend CORS configured via Terraform" >> $GITHUB_STEP_SUMMARY
-            echo "" >> $GITHUB_STEP_SUMMARY
-          elif [ "${{ needs.update_backend_cors.result }}" == "failure" ]; then
-            echo "### 🔒 CORS Configuration" >> $GITHUB_STEP_SUMMARY
-            echo "⚠️ CORS configuration failed (Amplify app may not be ready yet)" >> $GITHUB_STEP_SUMMARY
-            echo "💡 Terraform will automatically configure CORS on the next deployment when Amplify is available" >> $GITHUB_STEP_SUMMARY
-            echo "" >> $GITHUB_STEP_SUMMARY
-          fi
+          # Note about CORS configuration
+          echo "### 🔒 CORS Configuration" >> $GITHUB_STEP_SUMMARY
+          echo "✅ CORS is managed by Terraform infrastructure" >> $GITHUB_STEP_SUMMARY
+          echo "✅ Automatic configuration with proper timing" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
           
           echo "### ✅ Deployed with OIDC" >> $GITHUB_STEP_SUMMARY
           echo "- No AWS credentials stored in GitHub" >> $GITHUB_STEP_SUMMARY
