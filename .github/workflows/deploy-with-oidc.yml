@@ -435,6 +435,82 @@ jobs:
           echo "amplify_url=${AMPLIFY_APP_URL}" >> $GITHUB_OUTPUT
 
   # ==========================================
+  # STAGE 5: Update Backend CORS with Amplify URL
+  # ==========================================
+  update_backend_cors:
+    name: "Update Backend CORS"
+    runs-on: ubuntu-latest
+    needs: [get_oidc_credentials, deploy_app_runner, deploy_amplify]
+    if: ${{ needs.deploy_app_runner.result == 'success' && needs.deploy_amplify.result == 'success' }}
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Create .secrets file
+        run: |
+          echo "${{ secrets.SECRETS_B64 }}" | base64 -d > .secrets
+          chmod 600 .secrets
+
+      - name: Load Environment Variables
+        run: |
+          export $(grep -v '^#' .secrets | grep -v '^$' | xargs)
+          echo "AWS_REGION=${AWS_REGION}" >> $GITHUB_ENV
+          echo "TF_VAR_PREFIX=${TF_VAR_PREFIX}" >> $GITHUB_ENV
+
+      - name: Configure AWS Credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ needs.get_oidc_credentials.outputs.oidc_role_arn }}
+          aws-region: ${{ env.AWS_REGION }}
+          role-session-name: GitHubActions-UpdateCORS
+
+      - name: Update App Runner Runtime Env Vars (CORS)
+        env:
+          TF_VAR_PREFIX: ${{ env.TF_VAR_PREFIX }}
+          AMPLIFY_URL: ${{ needs.deploy_amplify.outputs.amplify_url }}
+        run: |
+          set -e
+          echo "🔎 Looking up App Runner service ARN by name..."
+          SERVICE_NAME="${TF_VAR_PREFIX}-app-runner"
+          SERVICE_ARN=$(aws apprunner list-services --query "ServiceSummaryList[?ServiceName=='${SERVICE_NAME}'].ServiceArn | [0]" --output text)
+          if [ "$SERVICE_ARN" = "None" ] || [ -z "$SERVICE_ARN" ]; then
+            echo "❌ Could not find App Runner service named ${SERVICE_NAME}"
+            exit 1
+          fi
+
+          echo "✅ Found service: $SERVICE_ARN"
+          echo "🔎 Describing current service config..."
+          DESC_JSON=$(aws apprunner describe-service --service-arn "$SERVICE_ARN")
+
+          IMAGE_IDENTIFIER=$(echo "$DESC_JSON" | jq -r '.Service.SourceConfiguration.ImageRepository.ImageIdentifier')
+          IMAGE_REPO_TYPE=$(echo "$DESC_JSON" | jq -r '.Service.SourceConfiguration.ImageRepository.ImageRepositoryType')
+          PORT=$(echo "$DESC_JSON" | jq -r '.Service.SourceConfiguration.ImageRepository.ImageConfiguration.Port')
+
+          # Extract existing runtime env vars and update/add Cors__AllowedOrigins
+          EXISTING_VARS=$(echo "$DESC_JSON" | jq -c '.Service.SourceConfiguration.ImageRepository.ImageConfiguration.RuntimeEnvironmentVariables // []')
+
+          ORIGIN=${AMPLIFY_URL}
+          # Normalize: remove trailing slash
+          ORIGIN=${ORIGIN%/}
+
+          # Ensure it has scheme
+          if ! echo "$ORIGIN" | grep -Eq '^https?://'; then
+            ORIGIN="https://${ORIGIN}"
+          fi
+
+          UPDATED_VARS=$(jq -n --argjson arr "$EXISTING_VARS" --arg name "Cors__AllowedOrigins" --arg value "$ORIGIN" '
+            # remove existing with same name, then add the new one
+            ($arr | map(select(.Name != $name))) + [{Name:$name, Value:$value}]
+          ')
+
+          echo "🔧 Updating service with Cors__AllowedOrigins=$ORIGIN"
+          aws apprunner update-service \
+            --service-arn "$SERVICE_ARN" \
+            --source-configuration "{\"ImageRepository\":{\"ImageIdentifier\":\"${IMAGE_IDENTIFIER}\",\"ImageRepositoryType\":\"${IMAGE_REPO_TYPE}\",\"ImageConfiguration\":{\"Port\":\"${PORT}\",\"RuntimeEnvironmentVariables\":${UPDATED_VARS}}}}"
+
+          echo "✅ Updated CORS allowed origin to: $ORIGIN"
+
+  # ==========================================
   # FINAL SUMMARY
   # ==========================================
   deployment_summary:
