@@ -311,8 +311,21 @@ jobs:
         run: |
           SERVICE_ARN=$(aws apprunner list-services --query "ServiceSummaryList[?ServiceName=='${{ env.TF_VAR_PREFIX }}-app-runner'].ServiceArn" --output text)
           if [ -n "$SERVICE_ARN" ]; then
-            echo "Found existing service: $SERVICE_ARN. Waiting for it to be stable..."
-            aws apprunner wait service-stable --service-arn "$SERVICE_ARN"
+            echo "Found existing service: $SERVICE_ARN. Polling status until stable..."
+            while true; do
+              CURRENT_STATE=$(aws apprunner describe-service --service-arn "$SERVICE_ARN" --query "Service.Status" --output text)
+              echo "Current state: $CURRENT_STATE"
+              if [ "$CURRENT_STATE" = "RUNNING" ]; then
+                echo "Service is stable!"
+                break
+              elif [ "$CURRENT_STATE" = "OPERATION_IN_PROGRESS" ]; then
+                echo "Service is updating, waiting..."
+              else
+                echo "Service is in an unexpected state ($CURRENT_STATE). Exiting..."
+                exit 1
+              fi
+              sleep 15
+            done
           else
             echo "No existing service found, skipping wait."
           fi
