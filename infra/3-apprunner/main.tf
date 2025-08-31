@@ -19,7 +19,7 @@ data "terraform_remote_state" "resources" {
   }
 }
 
-# Get the default domain from the Amplify app
+# Domain construction for CORS (used by GitHub Actions "Update CORS" job)
 locals {
   amplify_default_domain = var.configure_cors ? "${var.prefix}.amplifyapp.com" : ""
 }

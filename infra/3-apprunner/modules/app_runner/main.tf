@@ -65,7 +65,7 @@ resource "aws_apprunner_service" "app" {
       image_repository_type = "ECR"
       image_configuration {
         port = "8080"
-        # Environment variables are managed by the null_resource below
+        # Environment variables managed by GitHub Actions workflow
         runtime_environment_variables = {}
       }
     }
@@ -87,60 +87,5 @@ resource "aws_apprunner_service" "app" {
     IAC  = "True"
   }
 
-  # CORS will be managed by the null_resource below with proper timing
-}
-
-# Separate resource to handle CORS configuration with proper timing
-resource "null_resource" "cors_configuration" {
-  count = var.configure_cors && var.amplify_url != "" ? 1 : 0
-
-  depends_on = [aws_apprunner_service.app]
-
-  triggers = {
-    amplify_url = var.amplify_url
-    service_id  = aws_apprunner_service.app.id
-  }
-
-  provisioner "local-exec" {
-    command = <<-EOT
-      echo "Waiting for App Runner service to be ready..."
-      sleep 30
-
-      # Wait for service to be in RUNNING state
-      for i in {1..60}; do
-        STATUS=$(aws apprunner describe-service --service-arn ${aws_apprunner_service.app.arn} --region us-east-1 --query 'Service.Status' --output text 2>/dev/null)
-        if [ "$STATUS" = "RUNNING" ]; then
-          echo "✅ Service is running, configuring CORS..."
-          break
-        elif [ "$STATUS" = "OPERATION_IN_PROGRESS" ]; then
-          echo "⏳ Service operation in progress, waiting..."
-          sleep 20
-        else
-          echo "⚠️ Service status: $STATUS, retrying..."
-          sleep 10
-        fi
-      done
-
-      if [ "$STATUS" = "RUNNING" ]; then
-        echo "🎯 Updating CORS configuration..."
-        aws apprunner update-service \
-          --service-arn ${aws_apprunner_service.app.arn} \
-          --region us-east-1 \
-          --source-configuration '{
-            "ImageRepository": {
-              "ImageIdentifier": "${var.repository_url}:latest",
-              "ImageRepositoryType": "ECR",
-              "ImageConfiguration": {
-                "Port": "8080",
-                "RuntimeEnvironmentVariables": {
-                  "Cors__AllowedOrigins": "https://${var.amplify_url}"
-                }
-              }
-            }
-          }' || echo "⚠️ CORS update failed, will retry on next deployment"
-      else
-        echo "⚠️ Service didn't reach RUNNING state, skipping CORS configuration"
-      fi
-    EOT
-  }
+  # CORS will be configured by the GitHub Actions "Update CORS" job
 }

@@ -23,7 +23,7 @@ on:
         required: false
         type: boolean
         default: true
-      update_backend_cors:
+      update_cors:
         description: 'Check CORS status (CORS is handled by Terraform)'
         required: false
         type: boolean
@@ -464,28 +464,149 @@ jobs:
           echo "amplify_url=${AMPLIFY_APP_URL}" >> $GITHUB_OUTPUT
 
   # ==========================================
-  # STAGE 5: CORS Configuration (handled by Terraform)
+  # STAGE 5: Update CORS Configuration
   # ==========================================
-  cors_status:
-    name: "CORS Status Check"
+  update_cors:
+    name: "Update CORS"
     runs-on: ubuntu-latest
     needs: [get_oidc_credentials, deploy_app_runner, deploy_amplify]
     if: ${{ github.event.inputs.update_backend_cors != 'false' && needs.deploy_app_runner.result == 'success' && needs.deploy_amplify.result == 'success' }}
     steps:
-      - name: CORS Status
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Create .secrets file
         run: |
-          echo "🔒 CORS Configuration Status:"
-          echo "✅ CORS is now handled automatically by Terraform"
-          echo "✅ No manual intervention required"
-          echo "✅ Terraform manages timing and state properly"
-          echo "✅ CORS will be configured on next deployment if needed"
+          echo "${{ secrets.SECRETS_B64 }}" | base64 -d > .secrets
+          chmod 600 .secrets
+
+      - name: Load Environment Variables
+        env:
+          TF_VAR_PREFIX: ${{ env.TF_VAR_PREFIX }}
+        run: |
+          export $(grep -v '^#' .secrets | grep -v '^$' | xargs)
+          echo "AWS_REGION=${AWS_REGION}" >> $GITHUB_ENV
+          echo "TF_VAR_PREFIX=${TF_VAR_PREFIX}" >> $GITHUB_ENV
+          AMPLIFY_URL="${{ needs.deploy_amplify.outputs.amplify_url }}"
+          echo "AMPLIFY_URL=${AMPLIFY_URL}" >> $GITHUB_ENV
+
+      - name: Configure AWS Credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ needs.get_oidc_credentials.outputs.oidc_role_arn }}
+          aws-region: ${{ env.AWS_REGION }}
+          role-session-name: GitHubActions-UpdateCORS
+
+      - name: Bootstrap CORS Configuration
+        env:
+          TF_VAR_PREFIX: ${{ env.TF_VAR_PREFIX }}
+          AMPLIFY_URL: ${{ env.AMPLIFY_URL }}
+        run: |
+          echo "🔧 Starting CORS Bootstrap Process..."
+          echo "Amplify URL: ${AMPLIFY_URL}"
+
+          if [ -z "$AMPLIFY_URL" ]; then
+            echo "⚠️ No Amplify URL available, skipping CORS configuration"
+            exit 0
+          fi
+
+          # Find the App Runner service
+          SERVICE_NAME="${TF_VAR_PREFIX}-app-runner"
+          SERVICE_ARN=$(aws apprunner list-services \
+            --region ${AWS_REGION} \
+            --query "ServiceSummaryList[?ServiceName=='${SERVICE_NAME}'].ServiceArn | [0]" \
+            --output text)
+
+          if [ "$SERVICE_ARN" = "None" ] || [ -z "$SERVICE_ARN" ]; then
+            echo "❌ Could not find App Runner service with prefix ${TF_VAR_PREFIX}"
+            exit 1
+          fi
+
+          echo "✅ Found App Runner service: ${SERVICE_ARN}"
+
+          # Get current service configuration to preserve existing settings
+          CURRENT_CONFIG=$(aws apprunner describe-service \
+            --service-arn "$SERVICE_ARN" \
+            --region ${AWS_REGION})
+
+          # Extract current image identifier
+          IMAGE_IDENTIFIER=$(echo "$CURRENT_CONFIG" | jq -r '.Service.SourceConfiguration.ImageRepository.ImageIdentifier')
+
+          echo "📋 Current image: ${IMAGE_IDENTIFIER}"
+
+          # Wait for service to be ready
+          echo "⏳ Waiting for App Runner service to be ready..."
+          for i in {1..30}; do
+            SERVICE_STATUS=$(aws apprunner describe-service \
+              --service-arn "$SERVICE_ARN" \
+              --region ${AWS_REGION} \
+              --query 'Service.Status' \
+              --output text)
+
+            if [ "$SERVICE_STATUS" = "RUNNING" ]; then
+              echo "✅ Service is running, proceeding with CORS configuration"
+              break
+            elif [ "$SERVICE_STATUS" = "OPERATION_IN_PROGRESS" ]; then
+              echo "⏳ Service operation in progress, waiting 30 seconds..."
+              sleep 30
+            else
+              echo "⚠️ Service status: $SERVICE_STATUS, waiting..."
+              sleep 10
+            fi
+
+            if [ $i -eq 30 ]; then
+              echo "❌ Service didn't reach RUNNING state within timeout"
+              exit 1
+            fi
+          done
+
+          # Configure CORS
+          echo "🔒 Configuring CORS for App Runner service..."
+          ORIGIN="${AMPLIFY_URL}"
+
+          # Ensure HTTPS
+          if ! echo "$ORIGIN" | grep -q '^https://'; then
+            if echo "$ORIGIN" | grep -q '^http://'; then
+              ORIGIN=$(echo "$ORIGIN" | sed 's/^http:/https:/')
+            else
+              ORIGIN="https://${ORIGIN}"
+            fi
+          fi
+
+          ORIGIN="${ORIGIN%/}"
+          echo "🎯 Setting CORS origin to: ${ORIGIN}"
+
+          # Update the service with current image identifier
+          aws apprunner update-service \
+            --service-arn "$SERVICE_ARN" \
+            --region ${AWS_REGION} \
+            --source-configuration '{
+              "ImageRepository": {
+                "ImageIdentifier": "'${IMAGE_IDENTIFIER}'",
+                "ImageRepositoryType": "ECR",
+                "ImageConfiguration": {
+                  "Port": "8080",
+                  "RuntimeEnvironmentVariables": {
+                    "Cors__AllowedOrigins": "'${ORIGIN}'"
+                  }
+                }
+              }
+            }'
+
+          if [ $? -eq 0 ]; then
+            echo "✅ CORS configuration updated successfully"
+            echo "🔗 Allowed origin: ${ORIGIN}"
+          else
+            echo "❌ Failed to update CORS configuration"
+            exit 1
+          fi
   # ==========================================
   # FINAL SUMMARY
   # ==========================================
   deployment_summary:
     name: "Deployment Summary"
     runs-on: ubuntu-latest
-    needs: [get_oidc_credentials, deploy_resources, deploy_server, deploy_app_runner, deploy_amplify, cors_status]
+    needs: [get_oidc_credentials, deploy_resources, deploy_server, deploy_app_runner, deploy_amplify, update_cors]
     if: always()
     steps:
       - name: Summary
@@ -518,10 +639,17 @@ jobs:
           fi
 
           # Note about CORS configuration
-          echo "### 🔒 CORS Configuration" >> $GITHUB_STEP_SUMMARY
-          echo "✅ CORS is managed by Terraform infrastructure" >> $GITHUB_STEP_SUMMARY
-          echo "✅ Automatic configuration with proper timing" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
+          if [ "${{ needs.update_cors.result }}" == "success" ]; then
+            echo "### 🔒 CORS Configuration" >> $GITHUB_STEP_SUMMARY
+            echo "✅ CORS bootstrap completed successfully" >> $GITHUB_STEP_SUMMARY
+            echo "✅ Backend configured to accept requests from Amplify" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+          elif [ "${{ needs.update_cors.result }}" == "failure" ]; then
+            echo "### 🔒 CORS Configuration" >> $GITHUB_STEP_SUMMARY
+            echo "⚠️ CORS bootstrap failed" >> $GITHUB_STEP_SUMMARY
+            echo "💡 CORS can be configured manually or will be updated on next deployment" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+          fi
           
           echo "### ✅ Deployed with OIDC" >> $GITHUB_STEP_SUMMARY
           echo "- No AWS credentials stored in GitHub" >> $GITHUB_STEP_SUMMARY
