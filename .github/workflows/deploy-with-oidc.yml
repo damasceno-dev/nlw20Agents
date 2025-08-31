@@ -209,7 +209,7 @@ jobs:
               }
             },
             "OpenAI": {
-              "ApiKey": "PLACEHOLDER_WILL_USE_OIDC_FOR_SECRETS_MANAGER"
+              "ApiKey": "${OPENAI_API_KEY}"
             },
             "AwsCredentials": {
               "AwsDefaultRegion": "${AWS_REGION}",
@@ -475,24 +475,47 @@ jobs:
           AMPLIFY_URL: ${{ needs.deploy_amplify.outputs.amplify_url }}
         run: |
           set -e
-          echo "🔎 Looking up App Runner service ARN by name..."
-          SERVICE_NAME="${TF_VAR_PREFIX}-app-runner"
-          SERVICE_ARN=$(aws apprunner list-services --query "ServiceSummaryList[?ServiceName=='${SERVICE_NAME}'].ServiceArn | [0]" --output text)
+          
+          echo "🔎 Looking up App Runner service..."
+          
+          # Try both possible service name patterns
+          SERVICE_NAME="${TF_VAR_PREFIX}-api-service"
+          SERVICE_ARN=$(aws apprunner list-services \
+            --region ${AWS_REGION} \
+            --query "ServiceSummaryList[?ServiceName=='${SERVICE_NAME}'].ServiceArn | [0]" \
+            --output text)
+          
+          # If not found, try alternative name pattern
           if [ "$SERVICE_ARN" = "None" ] || [ -z "$SERVICE_ARN" ]; then
-            echo "❌ Could not find App Runner service named ${SERVICE_NAME}"
+            SERVICE_NAME="${TF_VAR_PREFIX}-app-runner"
+            SERVICE_ARN=$(aws apprunner list-services \
+              --region ${AWS_REGION} \
+              --query "ServiceSummaryList[?ServiceName=='${SERVICE_NAME}'].ServiceArn | [0]" \
+              --output text)
+          fi
+          
+          if [ "$SERVICE_ARN" = "None" ] || [ -z "$SERVICE_ARN" ]; then
+            echo "❌ Could not find App Runner service with prefix ${TF_VAR_PREFIX}"
+            echo "Available services:"
+            aws apprunner list-services --region ${AWS_REGION} --query "ServiceSummaryList[].ServiceName"
             exit 1
           fi
 
           echo "✅ Found service: $SERVICE_ARN"
 
           # Wait for service to be in a stable state
-          echo "⏳ Waiting for App Runner service to be ready for updates..."
+          echo "⏳ Checking App Runner service status..."
           MAX_ATTEMPTS=30
           ATTEMPT=1
 
           while [ $ATTEMPT -le $MAX_ATTEMPTS ]; do
-            SERVICE_STATUS=$(aws apprunner describe-service --service-arn "$SERVICE_ARN" --query 'Service.Status' --output text)
-            echo "Attempt $ATTEMPT: Service status is $SERVICE_STATUS"
+            SERVICE_STATUS=$(aws apprunner describe-service \
+              --service-arn "$SERVICE_ARN" \
+              --region ${AWS_REGION} \
+              --query 'Service.Status' \
+              --output text)
+          
+            echo "Attempt $ATTEMPT/$MAX_ATTEMPTS: Service status is $SERVICE_STATUS"
 
             if [ "$SERVICE_STATUS" = "RUNNING" ]; then
               echo "✅ Service is ready for updates"
@@ -501,57 +524,100 @@ jobs:
               echo "⏳ Service operation in progress, waiting 30 seconds..."
               sleep 30
             else
-              echo "⚠️ Unexpected service status: $SERVICE_STATUS, waiting 30 seconds..."
-              sleep 30
+              echo "⚠️ Unexpected service status: $SERVICE_STATUS"
+              # May be able to update anyway, so continue
+              break
             fi
 
             ATTEMPT=$((ATTEMPT + 1))
           done
 
-          if [ $ATTEMPT -gt $MAX_ATTEMPTS ]; then
-            echo "❌ Service did not become ready within the expected time"
-            exit 1
-          fi
+          echo "📋 Getting current service configuration..."
+          DESC_JSON=$(aws apprunner describe-service --service-arn "$SERVICE_ARN" --region ${AWS_REGION})
 
-          echo "🔎 Describing current service config..."
-          DESC_JSON=$(aws apprunner describe-service --service-arn "$SERVICE_ARN")
-
+          # Extract current configuration
           IMAGE_IDENTIFIER=$(echo "$DESC_JSON" | jq -r '.Service.SourceConfiguration.ImageRepository.ImageIdentifier')
           IMAGE_REPO_TYPE=$(echo "$DESC_JSON" | jq -r '.Service.SourceConfiguration.ImageRepository.ImageRepositoryType')
-          PORT=$(echo "$DESC_JSON" | jq -r '.Service.SourceConfiguration.ImageRepository.ImageConfiguration.Port')
+          PORT=$(echo "$DESC_JSON" | jq -r '.Service.SourceConfiguration.ImageRepository.ImageConfiguration.Port // "8080"')
 
-          # Extract existing runtime env vars and update/add Cors__AllowedOrigins
-          # AWS CLI for App Runner UpdateService expects a map/dict for RuntimeEnvironmentVariables
-          # Normalize existing to a map { KEY: VALUE }
-          EXISTING_VARS_MAP=$(echo "$DESC_JSON" | jq -c '
-            .Service.SourceConfiguration.ImageRepository.ImageConfiguration.RuntimeEnvironmentVariables // {} |
-            if type == "array" then (map({ (.Name): .Value }) | add) else . end
-          ')
-
-          ORIGIN=${AMPLIFY_URL}
-          # Normalize: remove trailing slash
-          ORIGIN=${ORIGIN%/}
-
-          # Ensure it has scheme
-          if ! echo "$ORIGIN" | grep -Eq '^https?://'; then
-            ORIGIN="https://${ORIGIN}"
+          # Get existing environment variables
+          EXISTING_VARS=$(echo "$DESC_JSON" | jq -c '.Service.SourceConfiguration.ImageRepository.ImageConfiguration.RuntimeEnvironmentVariables // {}')
+          
+          # Prepare CORS origin
+          ORIGIN="${AMPLIFY_URL}"
+          
+          # Ensure HTTPS for production
+          if ! echo "$ORIGIN" | grep -q '^https://'; then
+            if echo "$ORIGIN" | grep -q '^http://'; then
+              echo "⚠️ WARNING: Amplify URL has HTTP scheme, converting to HTTPS"
+              ORIGIN=$(echo "$ORIGIN" | sed 's/^http:/https:/')
+            else
+              ORIGIN="https://${ORIGIN}"
+            fi
           fi
-
-          # Merge/overwrite the CORS origin into the map
-          UPDATED_VARS_MAP=$(echo "$EXISTING_VARS_MAP" | jq -c --arg key "Cors__AllowedOrigins" --arg value "$ORIGIN" '. + {($key): $value}')
-
-          # Fallback default port if missing
-          if [ -z "$PORT" ] || [ "$PORT" = "null" ]; then
-            PORT="8080"
-          fi
-
-          echo "🔧 Updating service with Cors__AllowedOrigins=$ORIGIN"
+          
+          # Remove any trailing slash
+          ORIGIN="${ORIGIN%/}"
+          
+          echo "🔧 Updating CORS configuration..."
+          echo "   Amplify Origin: $ORIGIN"
+          
+          # Update environment variables with new CORS origin
+          # Using Cors__AllowedOrigins (double underscore) for .NET nested configuration
+          UPDATED_VARS=$(echo "$EXISTING_VARS" | jq -c \
+            --arg key "Cors__AllowedOrigins" \
+            --arg value "$ORIGIN" \
+            '. + {($key): $value}')
+          
+          # Create update request
+          UPDATE_JSON=$(jq -n \
+            --arg arn "$SERVICE_ARN" \
+            --arg image "$IMAGE_IDENTIFIER" \
+            --arg type "$IMAGE_REPO_TYPE" \
+            --arg port "$PORT" \
+            --argjson vars "$UPDATED_VARS" \
+            '{
+              ServiceArn: $arn,
+              SourceConfiguration: {
+                ImageRepository: {
+                  ImageIdentifier: $image,
+                  ImageRepositoryType: $type,
+                  ImageConfiguration: {
+                    Port: $port,
+                    RuntimeEnvironmentVariables: $vars
+                  }
+                }
+              }
+            }')
+          
+          # Apply the update
+          echo "$UPDATE_JSON" > update-request.json
+          
           aws apprunner update-service \
+            --cli-input-json file://update-request.json \
+            --region ${AWS_REGION}
+          
+          echo "✅ App Runner service updated with CORS configuration"
+          echo "   Allowed origin: $ORIGIN"
+          
+          # Clean up
+          rm -f update-request.json
+          
+          # Wait a moment for the update to start
+          sleep 5
+          
+          # Check final status
+          FINAL_STATUS=$(aws apprunner describe-service \
             --service-arn "$SERVICE_ARN" \
-            --source-configuration "{\"ImageRepository\":{\"ImageIdentifier\":\"${IMAGE_IDENTIFIER}\",\"ImageRepositoryType\":\"${IMAGE_REPO_TYPE}\",\"ImageConfiguration\":{\"Port\":\"${PORT}\",\"RuntimeEnvironmentVariables\":${UPDATED_VARS_MAP}}}}"
-
-          echo "✅ Updated CORS allowed origin to: $ORIGIN"
-
+            --region ${AWS_REGION} \
+            --query 'Service.Status' \
+            --output text)
+          
+          echo "📊 Service update initiated. Current status: $FINAL_STATUS"
+          
+          if [ "$FINAL_STATUS" = "OPERATION_IN_PROGRESS" ]; then
+            echo "ℹ️ Service is updating. This usually takes 2-3 minutes to complete."
+          fi
   # ==========================================
   # FINAL SUMMARY
   # ==========================================

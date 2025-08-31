@@ -10,7 +10,9 @@ import { CreateRoomForm } from "@/components/create-room-form";
 export default async function CreateRoomPage() {
     let rooms: Awaited<ReturnType<typeof getRoomsList>> = [];
     try {
+        console.log('Attempting to fetch rooms from API...');
         rooms = await getRoomsList();
+        console.log('Successfully fetched rooms:', rooms.length);
     } catch (error) {
         console.warn('Failed to fetch rooms during build:', error);
         // During build time or when API is unavailable, use empty array
