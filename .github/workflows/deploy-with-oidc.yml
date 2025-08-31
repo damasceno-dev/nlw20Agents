@@ -23,6 +23,11 @@ on:
         required: false
         type: boolean
         default: true
+      update_backend_cors:
+        description: 'Update App Runner CORS with Amplify URL'
+        required: false
+        type: boolean
+        default: true
 
 permissions:
   id-token: write
@@ -441,7 +446,7 @@ jobs:
     name: "Update Backend CORS"
     runs-on: ubuntu-latest
     needs: [get_oidc_credentials, deploy_app_runner, deploy_amplify]
-    if: ${{ needs.deploy_app_runner.result == 'success' && needs.deploy_amplify.result == 'success' }}
+    if: ${{ github.event.inputs.update_backend_cors != 'false' && needs.deploy_app_runner.result == 'success' && needs.deploy_amplify.result == 'success' }}
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
@@ -479,6 +484,35 @@ jobs:
           fi
 
           echo "✅ Found service: $SERVICE_ARN"
+
+          # Wait for service to be in a stable state
+          echo "⏳ Waiting for App Runner service to be ready for updates..."
+          MAX_ATTEMPTS=30
+          ATTEMPT=1
+
+          while [ $ATTEMPT -le $MAX_ATTEMPTS ]; do
+            SERVICE_STATUS=$(aws apprunner describe-service --service-arn "$SERVICE_ARN" --query 'Service.Status' --output text)
+            echo "Attempt $ATTEMPT: Service status is $SERVICE_STATUS"
+
+            if [ "$SERVICE_STATUS" = "RUNNING" ]; then
+              echo "✅ Service is ready for updates"
+              break
+            elif [ "$SERVICE_STATUS" = "OPERATION_IN_PROGRESS" ]; then
+              echo "⏳ Service operation in progress, waiting 30 seconds..."
+              sleep 30
+            else
+              echo "⚠️ Unexpected service status: $SERVICE_STATUS, waiting 30 seconds..."
+              sleep 30
+            fi
+
+            ATTEMPT=$((ATTEMPT + 1))
+          done
+
+          if [ $ATTEMPT -gt $MAX_ATTEMPTS ]; then
+            echo "❌ Service did not become ready within the expected time"
+            exit 1
+          fi
+
           echo "🔎 Describing current service config..."
           DESC_JSON=$(aws apprunner describe-service --service-arn "$SERVICE_ARN")
 
