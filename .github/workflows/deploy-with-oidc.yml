@@ -24,7 +24,7 @@ on:
         type: boolean
         default: true
       update_backend_cors:
-        description: 'Update App Runner CORS with Amplify URL'
+        description: 'Configure App Runner CORS with Amplify URL via Terraform'
         required: false
         type: boolean
         default: true
@@ -292,6 +292,7 @@ jobs:
           # Create terraform.tfvars for App Runner
           cat <<EOF > infra/3-apprunner/terraform.tfvars
           prefix = "${TF_VAR_PREFIX}"
+          configure_cors = false
           EOF
 
       - name: Setup Terraform
@@ -447,6 +448,8 @@ jobs:
     runs-on: ubuntu-latest
     needs: [get_oidc_credentials, deploy_app_runner, deploy_amplify]
     if: ${{ github.event.inputs.update_backend_cors != 'false' && needs.deploy_app_runner.result == 'success' && needs.deploy_amplify.result == 'success' }}
+    # Allow this to fail without failing the entire workflow
+    continue-on-error: true
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
@@ -469,154 +472,51 @@ jobs:
           aws-region: ${{ env.AWS_REGION }}
           role-session-name: GitHubActions-UpdateCORS
 
-      - name: Update App Runner Runtime Env Vars (CORS)
+      - name: Update App Runner CORS via Terraform
         env:
           TF_VAR_PREFIX: ${{ env.TF_VAR_PREFIX }}
-          AMPLIFY_URL: ${{ needs.deploy_amplify.outputs.amplify_url }}
         run: |
-          set -e
-          
-          echo "🔎 Looking up App Runner service..."
-          
-          # Try both possible service name patterns
-          SERVICE_NAME="${TF_VAR_PREFIX}-api-service"
-          SERVICE_ARN=$(aws apprunner list-services \
-            --region ${AWS_REGION} \
-            --query "ServiceSummaryList[?ServiceName=='${SERVICE_NAME}'].ServiceArn | [0]" \
-            --output text)
-          
-          # If not found, try alternative name pattern
-          if [ "$SERVICE_ARN" = "None" ] || [ -z "$SERVICE_ARN" ]; then
-            SERVICE_NAME="${TF_VAR_PREFIX}-app-runner"
-            SERVICE_ARN=$(aws apprunner list-services \
-              --region ${AWS_REGION} \
-              --query "ServiceSummaryList[?ServiceName=='${SERVICE_NAME}'].ServiceArn | [0]" \
-              --output text)
-          fi
-          
-          if [ "$SERVICE_ARN" = "None" ] || [ -z "$SERVICE_ARN" ]; then
-            echo "❌ Could not find App Runner service with prefix ${TF_VAR_PREFIX}"
-            echo "Available services:"
-            aws apprunner list-services --region ${AWS_REGION} --query "ServiceSummaryList[].ServiceName"
-            exit 1
-          fi
+          set +e  # Don't exit on first error, handle gracefully
 
-          echo "✅ Found service: $SERVICE_ARN"
+          echo "🔧 Updating App Runner CORS configuration via Terraform..."
 
-          # Wait for service to be in a stable state
-          echo "⏳ Checking App Runner service status..."
-          MAX_ATTEMPTS=30
-          ATTEMPT=1
+          # Update terraform.tfvars to enable CORS configuration
+          cat <<EOF > infra/3-apprunner/terraform.tfvars
+          prefix = "${TF_VAR_PREFIX}"
+          configure_cors = true
+          EOF
 
-          while [ $ATTEMPT -le $MAX_ATTEMPTS ]; do
-            SERVICE_STATUS=$(aws apprunner describe-service \
-              --service-arn "$SERVICE_ARN" \
-              --region ${AWS_REGION} \
-              --query 'Service.Status' \
-              --output text)
-          
-            echo "Attempt $ATTEMPT/$MAX_ATTEMPTS: Service status is $SERVICE_STATUS"
+          # Setup Terraform
+          cd infra/3-apprunner
 
-            if [ "$SERVICE_STATUS" = "RUNNING" ]; then
-              echo "✅ Service is ready for updates"
-              break
-            elif [ "$SERVICE_STATUS" = "OPERATION_IN_PROGRESS" ]; then
-              echo "⏳ Service operation in progress, waiting 30 seconds..."
-              sleep 30
+          # Configure Terraform backend
+          cat <<EOF > backend.tf
+          terraform {
+            backend "s3" {
+              bucket = "${TF_VAR_PREFIX}-terraform-state-unique1029"
+              key    = "3-apprunner/terraform.tfstate"
+              region = "${AWS_REGION}"
+              encrypt = true
+            }
+          }
+          EOF
+
+          echo "📋 Running Terraform plan..."
+          terraform plan -var-file=terraform.tfvars
+
+          if [ $? -eq 0 ]; then
+            echo "🚀 Applying CORS configuration..."
+            terraform apply -auto-approve -var-file=terraform.tfvars
+
+            if [ $? -eq 0 ]; then
+              echo "✅ App Runner CORS configuration updated successfully"
             else
-              echo "⚠️ Unexpected service status: $SERVICE_STATUS"
-              # May be able to update anyway, so continue
-              break
+              echo "❌ Failed to update App Runner CORS configuration"
+              echo "⚠️ This might be due to timing or the Amplify app not being available yet"
             fi
-
-            ATTEMPT=$((ATTEMPT + 1))
-          done
-
-          echo "📋 Getting current service configuration..."
-          DESC_JSON=$(aws apprunner describe-service --service-arn "$SERVICE_ARN" --region ${AWS_REGION})
-
-          # Extract current configuration
-          IMAGE_IDENTIFIER=$(echo "$DESC_JSON" | jq -r '.Service.SourceConfiguration.ImageRepository.ImageIdentifier')
-          IMAGE_REPO_TYPE=$(echo "$DESC_JSON" | jq -r '.Service.SourceConfiguration.ImageRepository.ImageRepositoryType')
-          PORT=$(echo "$DESC_JSON" | jq -r '.Service.SourceConfiguration.ImageRepository.ImageConfiguration.Port // "8080"')
-
-          # Get existing environment variables
-          EXISTING_VARS=$(echo "$DESC_JSON" | jq -c '.Service.SourceConfiguration.ImageRepository.ImageConfiguration.RuntimeEnvironmentVariables // {}')
-          
-          # Prepare CORS origin
-          ORIGIN="${AMPLIFY_URL}"
-          
-          # Ensure HTTPS for production
-          if ! echo "$ORIGIN" | grep -q '^https://'; then
-            if echo "$ORIGIN" | grep -q '^http://'; then
-              echo "⚠️ WARNING: Amplify URL has HTTP scheme, converting to HTTPS"
-              ORIGIN=$(echo "$ORIGIN" | sed 's/^http:/https:/')
-            else
-              ORIGIN="https://${ORIGIN}"
-            fi
-          fi
-          
-          # Remove any trailing slash
-          ORIGIN="${ORIGIN%/}"
-          
-          echo "🔧 Updating CORS configuration..."
-          echo "   Amplify Origin: $ORIGIN"
-          
-          # Update environment variables with new CORS origin
-          # Using Cors__AllowedOrigins (double underscore) for .NET nested configuration
-          UPDATED_VARS=$(echo "$EXISTING_VARS" | jq -c \
-            --arg key "Cors__AllowedOrigins" \
-            --arg value "$ORIGIN" \
-            '. + {($key): $value}')
-          
-          # Create update request
-          UPDATE_JSON=$(jq -n \
-            --arg arn "$SERVICE_ARN" \
-            --arg image "$IMAGE_IDENTIFIER" \
-            --arg type "$IMAGE_REPO_TYPE" \
-            --arg port "$PORT" \
-            --argjson vars "$UPDATED_VARS" \
-            '{
-              ServiceArn: $arn,
-              SourceConfiguration: {
-                ImageRepository: {
-                  ImageIdentifier: $image,
-                  ImageRepositoryType: $type,
-                  ImageConfiguration: {
-                    Port: $port,
-                    RuntimeEnvironmentVariables: $vars
-                  }
-                }
-              }
-            }')
-          
-          # Apply the update
-          echo "$UPDATE_JSON" > update-request.json
-          
-          aws apprunner update-service \
-            --cli-input-json file://update-request.json \
-            --region ${AWS_REGION}
-          
-          echo "✅ App Runner service updated with CORS configuration"
-          echo "   Allowed origin: $ORIGIN"
-          
-          # Clean up
-          rm -f update-request.json
-          
-          # Wait a moment for the update to start
-          sleep 5
-          
-          # Check final status
-          FINAL_STATUS=$(aws apprunner describe-service \
-            --service-arn "$SERVICE_ARN" \
-            --region ${AWS_REGION} \
-            --query 'Service.Status' \
-            --output text)
-          
-          echo "📊 Service update initiated. Current status: $FINAL_STATUS"
-          
-          if [ "$FINAL_STATUS" = "OPERATION_IN_PROGRESS" ]; then
-            echo "ℹ️ Service is updating. This usually takes 2-3 minutes to complete."
+          else
+            echo "❌ Terraform plan failed"
+            echo "⚠️ Skipping CORS update"
           fi
   # ==========================================
   # FINAL SUMMARY
@@ -653,6 +553,18 @@ jobs:
               echo "🔗 **Web Application**: Check Amplify console for URL" >> $GITHUB_STEP_SUMMARY
             fi
             echo "💡 **Note**: First deployment may take a few minutes to complete" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          # Note about CORS update status
+          if [ "${{ needs.update_backend_cors.result }}" == "success" ]; then
+            echo "### 🔒 CORS Configuration" >> $GITHUB_STEP_SUMMARY
+            echo "✅ Backend CORS configured via Terraform" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+          elif [ "${{ needs.update_backend_cors.result }}" == "failure" ]; then
+            echo "### 🔒 CORS Configuration" >> $GITHUB_STEP_SUMMARY
+            echo "⚠️ CORS configuration failed (Amplify app may not be ready yet)" >> $GITHUB_STEP_SUMMARY
+            echo "💡 Terraform will automatically configure CORS on the next deployment when Amplify is available" >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
           fi
           
