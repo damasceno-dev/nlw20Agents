@@ -307,6 +307,16 @@ jobs:
           aws-region: ${{ env.AWS_REGION }}
           role-session-name: GitHubActions-DeployAppRunner
 
+      - name: Wait for App Runner to be stable
+        run: |
+          SERVICE_ARN=$(aws apprunner list-services --query "ServiceSummaryList[?ServiceName=='${{ env.TF_VAR_PREFIX }}-app-runner'].ServiceArn" --output text)
+          if [ -n "$SERVICE_ARN" ]; then
+            echo "Found existing service: $SERVICE_ARN. Waiting for it to be stable..."
+            aws apprunner wait service-stable --service-arn "$SERVICE_ARN"
+          else
+            echo "No existing service found, skipping wait."
+          fi
+
       - name: Configure Terraform Backend (App Runner)
         working-directory: infra/3-apprunner
         run: |
