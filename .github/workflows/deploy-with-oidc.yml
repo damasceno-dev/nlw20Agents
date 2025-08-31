@@ -24,7 +24,7 @@ on:
         type: boolean
         default: true
       update_cors:
-        description: 'Configure App Runner CORS with Amplify URL (via GitHub Actions)'
+        description: 'Configure App Runner CORS with Amplify URL'
         required: false
         type: boolean
         default: true
@@ -504,6 +504,8 @@ jobs:
         run: |
           echo "🔧 Starting CORS Bootstrap Process..."
           echo "Amplify URL: ${AMPLIFY_URL}"
+          echo "📋 This will update the existing App Runner service with CORS settings"
+          echo "⚡ No image rebuild needed - just environment variable update"
 
           if [ -z "$AMPLIFY_URL" ]; then
             echo "⚠️ No Amplify URL available, skipping CORS configuration"
@@ -523,6 +525,20 @@ jobs:
           fi
 
           echo "✅ Found App Runner service: ${SERVICE_ARN}"
+
+          # Check current CORS configuration
+          echo "🔍 Checking current CORS configuration..."
+          CURRENT_CORS=$(aws apprunner describe-service \
+            --service-arn "$SERVICE_ARN" \
+            --region ${AWS_REGION} \
+            --query 'Service.SourceConfiguration.ImageRepository.ImageConfiguration.RuntimeEnvironmentVariables.Cors__AllowedOrigins' \
+            --output text 2>/dev/null || echo "Not set")
+
+          if [ "$CURRENT_CORS" != "Not set" ] && [ "$CURRENT_CORS" != "None" ]; then
+            echo "📋 Current CORS origin: $CURRENT_CORS"
+          else
+            echo "📋 Current CORS origin: Not configured"
+          fi
 
           # Get current service configuration to preserve existing settings
           CURRENT_CONFIG=$(aws apprunner describe-service \
@@ -596,6 +612,19 @@ jobs:
           if [ $? -eq 0 ]; then
             echo "✅ CORS configuration updated successfully"
             echo "🔗 Allowed origin: ${ORIGIN}"
+
+            # Verify the configuration was applied
+            echo "🔍 Verifying CORS configuration..."
+            UPDATED_CONFIG=$(aws apprunner describe-service \
+              --service-arn "$SERVICE_ARN" \
+              --region ${AWS_REGION} \
+              --query 'Service.SourceConfiguration.ImageRepository.ImageConfiguration.RuntimeEnvironmentVariables')
+
+            if echo "$UPDATED_CONFIG" | grep -q "Cors__AllowedOrigins"; then
+              echo "✅ Verification successful: CORS environment variable is set"
+            else
+              echo "⚠️ Verification warning: CORS environment variable not found in current config"
+            fi
           else
             echo "❌ Failed to update CORS configuration"
             exit 1
