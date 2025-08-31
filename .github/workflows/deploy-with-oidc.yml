@@ -24,7 +24,7 @@ on:
         type: boolean
         default: true
       update_cors:
-        description: 'Check CORS status (CORS is handled by Terraform)'
+        description: 'Configure App Runner CORS with Amplify URL (via GitHub Actions)'
         required: false
         type: boolean
         default: true
