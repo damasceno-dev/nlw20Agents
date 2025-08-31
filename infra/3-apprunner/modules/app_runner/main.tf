@@ -65,14 +65,9 @@ resource "aws_apprunner_service" "app" {
       image_repository_type = "ECR"
       image_configuration {
         port = "8080"
-
-        # Configure CORS if enabled and Amplify URL is available
-        dynamic "runtime_environment_variables" {
-          for_each = var.configure_cors && var.amplify_url != "" ? [1] : []
-          content {
-            Cors__AllowedOrigins = "https://${var.amplify_url}"
-          }
-        }
+        runtime_environment_variables = var.configure_cors && var.amplify_url != "" ? {
+          "Cors__AllowedOrigins" = "https://${var.amplify_url}"
+        } : {}
       }
     }
     auto_deployments_enabled = true
