@@ -487,7 +487,12 @@ jobs:
           PORT=$(echo "$DESC_JSON" | jq -r '.Service.SourceConfiguration.ImageRepository.ImageConfiguration.Port')
 
           # Extract existing runtime env vars and update/add Cors__AllowedOrigins
-          EXISTING_VARS=$(echo "$DESC_JSON" | jq -c '.Service.SourceConfiguration.ImageRepository.ImageConfiguration.RuntimeEnvironmentVariables // []')
+          # AWS CLI for App Runner UpdateService expects a map/dict for RuntimeEnvironmentVariables
+          # Normalize existing to a map { KEY: VALUE }
+          EXISTING_VARS_MAP=$(echo "$DESC_JSON" | jq -c '
+            .Service.SourceConfiguration.ImageRepository.ImageConfiguration.RuntimeEnvironmentVariables // {} |
+            if type == "array" then (map({ (.Name): .Value }) | add) else . end
+          ')
 
           ORIGIN=${AMPLIFY_URL}
           # Normalize: remove trailing slash
@@ -498,15 +503,18 @@ jobs:
             ORIGIN="https://${ORIGIN}"
           fi
 
-          UPDATED_VARS=$(jq -n --argjson arr "$EXISTING_VARS" --arg name "Cors__AllowedOrigins" --arg value "$ORIGIN" '
-            # remove existing with same name, then add the new one
-            ($arr | map(select(.Name != $name))) + [{Name:$name, Value:$value}]
-          ')
+          # Merge/overwrite the CORS origin into the map
+          UPDATED_VARS_MAP=$(echo "$EXISTING_VARS_MAP" | jq -c --arg key "Cors__AllowedOrigins" --arg value "$ORIGIN" '. + {($key): $value}')
+
+          # Fallback default port if missing
+          if [ -z "$PORT" ] || [ "$PORT" = "null" ]; then
+            PORT="8080"
+          fi
 
           echo "🔧 Updating service with Cors__AllowedOrigins=$ORIGIN"
           aws apprunner update-service \
             --service-arn "$SERVICE_ARN" \
-            --source-configuration "{\"ImageRepository\":{\"ImageIdentifier\":\"${IMAGE_IDENTIFIER}\",\"ImageRepositoryType\":\"${IMAGE_REPO_TYPE}\",\"ImageConfiguration\":{\"Port\":\"${PORT}\",\"RuntimeEnvironmentVariables\":${UPDATED_VARS}}}}"
+            --source-configuration "{\"ImageRepository\":{\"ImageIdentifier\":\"${IMAGE_IDENTIFIER}\",\"ImageRepositoryType\":\"${IMAGE_REPO_TYPE}\",\"ImageConfiguration\":{\"Port\":\"${PORT}\",\"RuntimeEnvironmentVariables\":${UPDATED_VARS_MAP}}}}"
 
           echo "✅ Updated CORS allowed origin to: $ORIGIN"
 
