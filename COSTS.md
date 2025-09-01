@@ -1,82 +1,173 @@
-# AWS Cost Analysis and Recommendations
+# 💰 AWS Cost Analysis and Recommendations
 
-Last reviewed: 2025-08-25
-Region assumed: us-east-1 (pricing varies by region)
+**Last reviewed:** 2025-09-01  
+**Region assumed:** us-east-1 (pricing varies by region)
 
-Summary
-- When the infrastructure in this repo is fully deployed, the baseline monthly spend is likely around $95–$130+ per month, primarily due to:
-  - AWS App Runner (1 vCPU, 2 GB) — always-on instance
-  - Amazon Aurora Serverless v2 (min capacity 0.5 ACU)
-- With light usage and minimal storage, you should expect the spend to hover at or slightly above $100/month unless resources are destroyed when not in use.
+## 📊 Executive Summary
 
-What gets deployed and potential monthly cost
-1) VPC (infra/2-resources/modules/vpc)
-- 1 VPC, 2 public subnets, 1 Internet Gateway, 1 route table, 2 associations
-- Cost impact: Typically $0 for these components (no NAT Gateways here — good; NATs can be ~$30–$35/each/month plus data).
+When the full-stack infrastructure is deployed, expect baseline monthly costs of **$95–$150+**, primarily driven by:
+- **AWS App Runner** (1 vCPU, 2 GB) — always-on backend API hosting
+- **Amazon Aurora Serverless v2** (min capacity 0.5 ACU) — managed PostgreSQL database  
+- **AWS Amplify** — frontend hosting and CI/CD for Next.js application
 
-2) Aurora PostgreSQL Serverless v2 (infra/2-resources/modules/aurora)
-- Serverless v2 with serverlessv2_scaling_configuration: min_capacity = 0.5, max_capacity = 2
-- Cluster and 1 instance (db.serverless), publicly accessible
-- Cost drivers:
-  - ACU-hours charged per second. With min 0.5 ACU, expect ~0.5 ACU billed when idle.
-  - Storage (GB-month) and I/O requests billed separately.
-- Ballpark estimate:
-  - ACU: ~0.5 ACU × ~$0.12/ACU-hr × ~730 hr ≈ $43.8/month
-  - Storage/I/O: $5–$15/month for small dev footprints
-  - Total Aurora: roughly $45–$60/month at low traffic
+With light usage, expect costs around **$100-120/month**. For production workloads, budget **$150-250/month**.
 
-3) ECR (infra/2-resources/modules/ecr)
-- ECR repository with lifecycle for untagged images after 7 days
-- Cost drivers: image storage (GB-month), data transfer egress (if any)
-- Ballpark: typically $1–$5/month for small repos
+## 🏗️ AWS Services Deployed and Costs
 
-4) App Runner (infra/3-apprunner)
-- Instance configuration: cpu = 1024 (1 vCPU), memory = 2048 (2 GB)
-- App Runner does not scale to zero; at least one instance remains active.
-- Cost drivers:
-  - Compute: ~$0.064 per vCPU-hour; Memory: ~$0.0075 per GB-hour
-  - For 1 vCPU + 2 GB: (0.064 × 1) + (0.0075 × 2) = ~$0.079/hr
-  - Monthly: ~$0.079 × ~730 hr ≈ ~$57.7/month (plus requests/data transfer)
-- Ballpark: ~$55–$70/month with light traffic
+### 1. **VPC and Networking** (infra/2-resources/modules/vpc)
+- **Components:** 1 VPC, 2 public subnets, 1 Internet Gateway, 1 route table, 2 associations
+- **Cost Impact:** **$0/month** for these components
+- **Note:** No NAT Gateways deployed (good cost optimization; NATs would add ~$30–$35 each/month plus data processing)
 
-5) Terraform state (S3 backend) and CloudWatch logs
-- Typically a few cents to a couple of dollars per month depending on usage/log volume.
+### 2. **Amazon Aurora Serverless v2 PostgreSQL** (infra/2-resources/modules/aurora)
+- **Configuration:** 
+  - Serverless v2 scaling: min 0.5 ACU, max 2 ACU
+  - 1 cluster with 1 instance (db.serverless), publicly accessible
+- **Cost Drivers:**
+  - **ACU-hours:** Charged per second, minimum 0.5 ACU when idle
+  - **Storage:** GB-month for data storage
+  - **I/O:** Per request charges
+- **Monthly Estimate:**
+  - **ACU:** ~0.5 ACU × $0.12/ACU-hr × 730 hrs = **~$44/month**
+  - **Storage/I/O:** **$5–$15/month** for small applications
+  - **Total Aurora: $45–$60/month**
 
-Workflows that can incur cost
-- .github/workflows/deploy-with-oidc.yml: Can deploy infra, server (to ECR), and App Runner.
-- .github/workflows/deploy-on-change.yml: Auto-triggers deployments based on changes. If infra files change, it can redeploy infrastructure and App Runner.
-- .github/workflows/destroy-with-oidc.yml: Manual teardown to stop charges.
+### 3. **AWS App Runner** (infra/3-apprunner)
+- **Configuration:** 1 vCPU, 2 GB RAM (.NET API hosting)
+- **Behavior:** Always-on (does not scale to zero)
+- **Cost Drivers:**
+  - **Compute:** $0.064 per vCPU-hour
+  - **Memory:** $0.007 per GB-hour
+  - **Formula:** (0.064 × 1) + (0.007 × 2) = $0.078/hour
+- **Monthly Estimate:** $0.078 × 730 hrs = **~$57/month**
+- **With traffic:** **$55–$70/month**
 
-Key risks for exceeding $100/month
-- App Runner baseline (~$58/mo) + Aurora Serverless v2 baseline (~$45–$60/mo) exceeds ~$100/mo combined, even with minimal usage.
-- Adding NAT Gateways (currently not present) would add ~$30–$35 each per month plus data processing — avoid unless required.
+### 4. **AWS Amplify** (Frontend Hosting)
+- **Features:**
+  - **Hosting:** Next.js static/SSR hosting with CDN
+  - **CI/CD:** Automatic builds from GitHub
+  - **Custom Domain:** SSL certificates included
+- **Cost Drivers:**
+  - **Build minutes:** $0.01 per build minute
+  - **Hosting:** $0.15 per GB stored + $0.15 per GB served
+  - **Requests:** $0.30 per million requests
+- **Monthly Estimate:**
+  - **Builds:** ~20 builds × 5 min = **$1/month**
+  - **Hosting:** ~1 GB stored + 10 GB served = **$1.65/month**
+  - **Requests:** Light traffic = **$1-3/month**
+  - **Total Amplify: $3-6/month**
 
-Recommendations to keep costs down
-- For dev/testing:
-  1. Avoid leaving App Runner and Aurora running when not needed. Use the “Destroy with OIDC” workflow to tear down resources after testing.
-  2. Consider replacing Aurora with:
-     - RDS t4g/t3.micro or t4g/t3.small for dev (can be ~$10–$30/mo + storage), or
-     - A lighter-weight DB (e.g., PostgreSQL on Lightsail) for experiments, or
-     - In-memory/SQLite for local-only development.
-  3. If you must keep App Runner:
-     - Keep current size (1 vCPU, 2 GB) but be aware of the ~$58/mo baseline.
-     - Reduce egress and external calls to control variable costs.
-  4. Limit auto-deploy behavior:
-     - Use deploy-with-oidc.yml manually when needed, rather than enabling deploy-on-change for infra.
-     - Or modify deploy-on-change.yml so infra/app runner deployment is opt-in (manual approve step) to prevent accidental long-running environments.
-  5. Security and potential hidden costs:
-     - Aurora SG currently allows 0.0.0.0/0 on port 5432. Restrict to known CIDR/IPs to reduce risk of abuse/bad traffic (also helps avoid unwanted data transfer).
+### 5. **Amazon ECR** (Container Registry)
+- **Purpose:** Docker image storage for .NET API
+- **Configuration:** Private repository with lifecycle (untagged images deleted after 7 days)
+- **Monthly Estimate:** **$1–$5/month** for typical usage
 
-Estimated total monthly (light usage)
-- Aurora Serverless v2: ~$45–$60
-- App Runner: ~$55–$70
-- ECR/S3/Logs/Data transfer: ~$2–$10
-- Total: ~$102–$140
+### 6. **Supporting Services**
+- **S3:** Terraform state storage = **$1-2/month**
+- **CloudWatch Logs:** Application logging = **$2-5/month**
+- **Data Transfer:** Varies by usage = **$2-10/month**
 
-How to quickly avoid charges
-- If you’ve deployed, run: GitHub Actions → “Destroy with OIDC” → type DESTROY
-- Verify in AWS Console that all resources (App Runner, Aurora, ECR) are removed.
+## 📊 Monthly Cost Summary
 
-Notes
-- Prices are approximate and change over time/region. Use the AWS Pricing Calculator with your exact region and expected usage for a precise estimate.
-- App Runner minimum size in this config is already at the service’s lower bound (1 vCPU, 2 GB). Aurora Serverless v2 minimum is 0.5 ACU; it cannot scale to zero.
+### Development Environment (Light Usage)
+| Service                  | Cost Range    | Notes                              |
+|--------------------------|---------------|------------------------------------|
+| **Aurora Serverless v2** | $45–$60       | Minimum 0.5 ACU always running     |
+| **App Runner**           | $55–$70       | 1 vCPU, 2GB RAM always-on          |
+| **AWS Amplify**          | $3–$6         | Low build frequency, light traffic |
+| **ECR**                  | $1–$5         | Docker image storage               |
+| **Supporting Services**  | $5–$15        | S3, CloudWatch, data transfer      |
+| **💰 Total Development** | **$109–$156** |                                    |
+
+### Production Environment (Moderate Usage)
+| Service                  | Cost Range    | Notes                          |
+|--------------------------|---------------|--------------------------------|
+| **Aurora Serverless v2** | $60–$120      | Higher ACU usage, more storage |
+| **App Runner**           | $70–$150      | Higher traffic, data transfer  |
+| **AWS Amplify**          | $10–$25       | More builds, higher traffic    |
+| **ECR**                  | $5–$10        | Multiple image versions        |
+| **Supporting Services**  | $15–$35       | More logs, data transfer       |
+| **💰 Total Production**  | **$160–$340** |                                |
+
+## ⚠️ Cost Optimization Strategies
+
+### 🔥 Immediate Cost Savers
+
+1. **Destroy When Not In Use**
+   ```bash
+   # GitHub Actions → "Destroy with OIDC" → type DESTROY
+   # Saves ~$100+/month when resources are not needed
+   ```
+
+2. **Aurora Alternatives for Development**
+   - **RDS t4g.micro:** ~$15-25/month (vs $45-60 for Aurora)
+   - **PostgreSQL on Lightsail:** ~$10-20/month
+   - **Local PostgreSQL:** $0 (development only)
+
+3. **App Runner Optimization**
+   - Current configuration is already at minimum (1 vCPU, 2GB)
+   - Consider **AWS Lambda + API Gateway** for intermittent usage
+   - Estimated Lambda cost: ~$5-15/month for light usage
+
+### 📈 Production Optimizations
+
+1. **CloudFront Integration**
+   - Add CloudFront for Amplify hosting
+   - Reduces Amplify data transfer costs
+   - Better global performance
+
+2. **Aurora Scaling Policies**
+   - Fine-tune min/max ACU based on actual usage
+   - Consider Aurora I/O Optimized for high-traffic apps
+
+3. **Monitoring and Alerts**
+   - Set AWS Budget alerts at $150, $200, $300 thresholds
+   - Use CloudWatch to identify cost spikes
+
+## 🚨 Cost Risk Factors
+
+### High-Risk Items
+- **Aurora baseline:** $45-60/month minimum (cannot scale to zero)
+- **App Runner baseline:** $55-70/month minimum (always-on)
+- **NAT Gateways:** Would add $30-35 each/month (currently not deployed ✅)
+
+### Potential Surprise Costs
+- **Data Transfer:** Can spike with high traffic or external API calls
+- **Aurora I/O:** Heavy database operations increase costs
+- **Amplify Builds:** Frequent deployments add build minute charges
+
+## 🛠️ GitHub Workflows Impact on Costs
+
+| Workflow                | Cost Impact                        | Recommendation                             |
+|-------------------------|------------------------------------|--------------------------------------------|
+| `deploy-with-oidc.yml`  | High - deploys full infrastructure | Use manually for production deployments    |
+| `deploy-on-change.yml`  | Medium - auto-deploys on changes   | Consider manual approval for infra changes |
+| `destroy-with-oidc.yml` | Negative - saves money             | Use regularly for dev/test environments    |
+
+## 💡 Quick Cost Check Commands
+
+**Verify All Resources Destroyed:**
+```bash
+# Check App Runner
+aws apprunner list-services --region us-east-1
+
+# Check Aurora
+aws rds describe-db-clusters --region us-east-1
+
+# Check ECR repositories
+aws ecr describe-repositories --region us-east-1
+```
+
+**Destroy Everything:**
+1. GitHub Actions → "Destroy with OIDC"
+2. Type `DESTROY` to confirm
+3. Wait ~10 minutes for completion
+4. Verify in AWS Console that all resources are removed
+
+## 📝 Important Notes
+
+- **Prices are estimates** and vary by region/usage - use AWS Pricing Calculator for precision
+- **Aurora Serverless v2** cannot scale to zero (minimum 0.5 ACU)
+- **App Runner** always maintains at least one instance
+- **Amplify** provides excellent value for frontend hosting with built-in CI/CD
+- **All workflows are manual** - no accidental deployments unless explicitly triggered
