@@ -4,7 +4,8 @@ import { Loader2, Plus } from "lucide-react";
 import { useRouter } from "next/navigation";
 import type React from "react";
 import { useState } from "react";
-import { usePostRoomsCreate } from "@/api/generated/serverAPI";
+import { usePostRoomsCreate, getGetRoomsListQueryKey } from "@/api/generated/serverAPI";
+import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -13,12 +14,15 @@ import { Textarea } from "@/components/ui/textarea";
 
 export function CreateRoomForm() {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
 
   const createRoomMutation = usePostRoomsCreate({
     mutation: {
       onSuccess: (data) => {
+        // Invalidate and refetch rooms list
+        queryClient.invalidateQueries({ queryKey: getGetRoomsListQueryKey() });
         // Redirect to the newly created room
         router.push(`/room/${data.id}`);
       },

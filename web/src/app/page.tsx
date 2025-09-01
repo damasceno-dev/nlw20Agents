@@ -1,22 +1,16 @@
+"use client";
+
 import Link from "next/link";
-import { getRoomsList } from "@/api/generated/serverAPI";
+import { useGetRoomsList } from "@/api/generated/serverAPI";
 import {Card, CardContent, CardDescription, CardHeader, CardTitle} from "@/components/ui/card";
-import {ArrowRight} from "lucide-react";
+import {ArrowRight, Loader2} from "lucide-react";
 import {Badge} from "@/components/ui/badge";
 import {formatDate} from "@/utils/format-date";
 import { CreateRoomForm } from "@/components/create-room-form";
 
 
-export default async function CreateRoomPage() {
-    let rooms: Awaited<ReturnType<typeof getRoomsList>> = [];
-    try {
-        console.log('Attempting to fetch rooms from API...');
-        rooms = await getRoomsList();
-        console.log('Successfully fetched rooms:', rooms.length);
-    } catch (error) {
-        console.warn('Failed to fetch rooms during build:', error);
-        // During build time or when API is unavailable, use empty array
-    }
+export default function CreateRoomPage() {
+    const { data: rooms = [], isLoading, error } = useGetRoomsList();
 
     return (
         <div className="min-h-screen p-4">
@@ -33,7 +27,19 @@ export default async function CreateRoomPage() {
                             </CardDescription>
                         </CardHeader>
                         <CardContent className="flex flex-col gap-3">
-                            {rooms?.map((room) => (
+                            {isLoading ? (
+                                <div className="flex items-center justify-center py-8">
+                                    <Loader2 className="size-6 animate-spin" />
+                                    <span className="ml-2">Carregando salas...</span>
+                                </div>
+                            ) : error ? (
+                                <div className="text-red-500 text-center py-4">
+                                    Erro ao carregar salas. Tente novamente.
+                                </div>
+                            ) : rooms?.length === 0 ? (
+                                <p className="text-gray-500 text-center py-4">Nenhuma sala encontrada.</p>
+                            ) : (
+                                rooms?.map((room) => (
                                 <div className="flex items-center justify-between rounded-lg border p-3 transition-all hover:bg-gray-800" key={room.id} >
                                     <div className="flex flex-1 flex-col gap-1">
                                         <h3 className="font-semibold text-lg">{room.name || 'Unnamed Room'}</h3>
@@ -54,14 +60,11 @@ export default async function CreateRoomPage() {
                                         <ArrowRight className="size-3" />
                                     </Link>
                                 </div>
-                            ))}
+                                ))
+                            )}
                         </CardContent>
                     </Card>
                 </div>
-
-                {rooms?.length === 0 && (
-                    <p className="text-gray-500">No rooms found.</p>
-                )}
             </div>
         </div>
     );
