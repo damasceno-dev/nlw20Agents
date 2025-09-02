@@ -1,31 +1,5 @@
 name: "Hibernate Project"
 
-description: |
-  🛌 **Project Hibernation Workflow**
-
-  This workflow safely deactivates all AWS resources to achieve zero-cost hibernation while preserving the shared OIDC provider for other projects.
-
-  **What it destroys:**
-  - ✅ AWS App Runner service (compute costs)
-  - ✅ AWS Amplify hosting (hosting costs)
-  - ✅ Aurora PostgreSQL database (storage costs)
-  - ✅ VPC and networking (NAT Gateway costs)
-  - ✅ ECR repository (storage costs)
-  - ✅ Project-specific OIDC IAM role (permissions)
-
-  **What it preserves:**
-  - 🔐 Shared OIDC provider (for other projects)
-  - 📁 All code and configurations
-  - 🔧 GitHub repository and workflows
-  - 📋 Infrastructure blueprints (Terraform modules)
-
-  **Reactivation requires:**
-  1. Recreate S3 terraform state bucket
-  2. Run oidc-first-time-setup.yml (reuses existing provider)
-  3. Run deploy-with-oidc.yml to recreate all resources
-
-  **Estimated monthly savings:** ~$100-500+ depending on usage
-
 on:
   workflow_dispatch:
     inputs:
