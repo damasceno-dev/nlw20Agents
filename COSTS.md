@@ -138,11 +138,61 @@ With light usage, expect costs around **$100-120/month**. For production workloa
 
 ## 🛠️ GitHub Workflows Impact on Costs
 
-| Workflow                | Cost Impact                        | Recommendation                             |
-|-------------------------|------------------------------------|--------------------------------------------|
-| `deploy-with-oidc.yml`  | High - deploys full infrastructure | Use manually for production deployments    |
-| `deploy-on-change.yml`  | Medium - auto-deploys on changes   | Consider manual approval for infra changes |
-| `destroy-with-oidc.yml` | Negative - saves money             | Use regularly for dev/test environments    |
+### Workflow Cost Impact Matrix
+
+| Workflow | Purpose | Cost Impact | Monthly Cost | Recommendation |
+|----------|---------|-------------|--------------|----------------|
+| `oidc-first-time-setup.yml` | 🔐 OIDC Setup | None | **$0** | Run once per AWS account |
+| `deploy-with-oidc.yml` | 🚀 Full Deployment | High | **$109–$340** | Use manually for controlled deployments |
+| `hibernate-project.yml` | 🛌 Zero Hibernation | Negative | **$0** | **Use regularly** to save ~$100-300/month |
+
+### Service-by-Service Cost Breakdown (Active Deployment)
+
+| Service | Configuration | Cost Range | Notes |
+|---------|---------------|------------|-------|
+| **App Runner** | 1 vCPU, 2GB RAM | $55–$70 | Always-on backend API |
+| **Aurora Serverless v2** | 0.5-2 ACU | $45–$120 | PostgreSQL with pgvector |
+| **AWS Amplify** | Next.js hosting | $3–$25 | Frontend + CI/CD |
+| **ECR** | Docker registry | $1–$10 | Image storage |
+| **VPC** | Networking | $0–$35 | No NATs = $0, with NATs = $30-35 |
+| **Supporting** | S3, CloudWatch | $5–$35 | Logs, state storage, transfer |
+
+### Hibernation Savings Calculator
+
+**Before Hibernation (Active):**
+- App Runner: $55-70/month
+- Aurora: $45-120/month
+- Amplify: $3-25/month
+- Other: $10-30/month
+- **Total: $113-245/month**
+
+**After Hibernation (Zero Cost):**
+- All AWS services destroyed
+- OIDC provider preserved ($0)
+- **Total: $0/month**
+
+**💰 Monthly Savings: $113-245 (99.5% cost reduction)**
+
+### Hibernation Workflow Features
+
+**What Gets Destroyed:**
+- ✅ AWS App Runner service (compute costs eliminated)
+- ✅ Aurora PostgreSQL database (storage costs eliminated)
+- ✅ AWS Amplify hosting (hosting costs eliminated)
+- ✅ VPC and networking (NAT Gateway costs eliminated)
+- ✅ ECR repository (storage costs eliminated)
+- ✅ Project-specific OIDC IAM role (permissions cleaned up)
+
+**What Gets Preserved:**
+- 🔐 Shared OIDC provider (for other projects)
+- 📁 All code and configurations
+- 🔧 GitHub repository and workflows
+- 📋 Infrastructure blueprints (Terraform modules)
+
+**Reactivation Cost:**
+- Recreate S3 bucket: ~$1/month
+- OIDC role recreation: $0 (automated)
+- Full redeployment: Normal costs resume
 
 ## 💡 Quick Cost Check Commands
 

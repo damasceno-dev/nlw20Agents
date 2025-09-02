@@ -224,49 +224,100 @@ Can be reused across projects.
 
 ## 💰 Costs and Budget
 
-For comprehensive cost analysis including AWS Amplify, service-by-service breakdowns, and optimization strategies, see **[COSTS.md](COSTS.md)**.
+For comprehensive cost analysis, service-by-service breakdowns, optimization strategies, and hibernation savings calculator, see **[COSTS.md](COSTS.md)**.
 
-**Quick Summary:** Expect $109-156/month for development, $160-340/month for production. Use the "Hibernate Project" workflow to eliminate costs when not in use (~$100-500/month savings).
+**Quick Summary:** $109-340/month active deployment, **$0/month** during hibernation.
 
 ## 🏗️ Deployment Workflows
 
-After OIDC setup, you can trigger Deploy with OIDC again and terraform will detect and apply any changes
+### 📋 Available Workflows
+
+| Workflow | Purpose | Trigger | Duration |
+|----------|---------|---------|----------|
+| `oidc-first-time-setup.yml` | One-time OIDC setup | Manual | ~5-10 min |
+| `deploy-with-oidc.yml` | Full infrastructure deployment | Manual | ~15-25 min |
+| `hibernate-project.yml` | Zero-cost hibernation | Manual | ~10-15 min |
+
+### 🔐 OIDC First-Time Setup
+**Purpose:** Establish secure GitHub OIDC authentication for AWS deployments
+
+**What it creates:**
+- GitHub OIDC provider (shared across projects)
+- Project-specific IAM role with minimal permissions
+- S3 bucket for Terraform state storage
+
+**When to run:** Once per AWS account, before any deployments
+
+### 🚀 Main Deployment (Deploy with OIDC)
+**Purpose:** Deploy complete application infrastructure to AWS
+
+**What it deploys:**
+- **Backend:** .NET API on AWS App Runner
+- **Frontend:** Next.js app on AWS Amplify
+- **Database:** Aurora PostgreSQL with pgvector
+- **Network:** VPC with public/private subnets
+- **Registry:** ECR for Docker images
+
+**Cost Analysis:** See **[COSTS.md](COSTS.md)** for detailed cost breakdown by service
+
+**Workflow Options:**
+- ✅ Deploy Infrastructure
+- ✅ Deploy Server
+- ✅ Deploy App Runner
+- ✅ Deploy Amplify
+- ✅ Configure App Runner CORS with Amplify URL
+
+### 🛌 Project Hibernation
+**Purpose:** Achieve zero-cost hibernation while preserving shared resources
+
+**What it destroys:** See **[COSTS.md](COSTS.md)** for cost impact details
+
+**What it preserves:**
+- 🔐 Shared OIDC provider (for other projects)
+- 📁 All code and configurations
+- 🔧 GitHub repository and workflows
+- 📋 Infrastructure blueprints (Terraform modules)
+
+**Reactivation process:**
+1. Recreate S3 terraform state bucket
+2. Run `oidc-first-time-setup.yml` (reuses existing provider)
+3. Run `deploy-with-oidc.yml` to recreate all resources
+
+**Savings Calculator:** See **[COSTS.md](COSTS.md)** for hibernation savings analysis
+
+### 💡 Workflow Strategy
+
+**Development → Production → Hibernation:**
+```mermaid
+graph LR
+    A[oidc-first-time-setup.yml] --> B[deploy-with-oidc.yml]
+    B --> C[hibernate-project.yml]
+    C --> B
+```
+
+**Key Benefits:**
+- **Zero AWS Credentials:** GitHub OIDC handles authentication
+- **Complete Infrastructure as Code:** Terraform manages everything
+- **True Zero Cost:** Full hibernation preserves shared resources (see **[COSTS.md](COSTS.md)**)
+- **Quick Reactivation:** Automated redeployment from preserved blueprints
 
 > 🎯 **All workflows are manual-only** - No automatic deployments occur. You have full control over when and what gets deployed.
 
-```bash
-# GitHub Actions → "Deploy with OIDC" → Run workflow
-# Choose which components to deploy:
-# ✅ Deploy Infrastructure
-# ✅ Deploy Server  
-# ✅ Deploy App Runner
-# ✅ Deploy Amplify
-# ✅ Configure App Runner CORS with Amplify URL
-```
-
 ## 🗑️ Infrastructure Teardown
 
-### Temporary Hibernation (Recommended for Cost Savings)
+### Hibernation Workflow
 
-Use hibernation to temporarily shut down your project while preserving the ability to easily reactivate it:
+For detailed hibernation instructions, see the **"🛌 Project Hibernation"** section above.
 
+**Quick Hibernation Steps:**
 1. **GitHub Actions** → **"Hibernate Project"**
 2. Type `HIBERNATE` to confirm
-3. Configure options:
-   - **Cleanup OIDC role**: ✅ Recommended for long-term hibernation
-   - **Keep OIDC provider**: ✅ Recommended if you have other projects
-4. Wait for completion (~10 minutes)
+3. Wait for completion (~10-15 minutes)
 
-**Benefits of Hibernation:**
-- 💰 **Eliminates ~$100-500/month** in AWS costs
-- 🚀 **Easy reactivation** - just run deploy workflow when you return
-- 🔐 **Optionally preserves OIDC** for instant restart
-- 📋 **Keeps all code and infrastructure blueprints**
+**Result:** Zero-cost hibernation while preserving shared OIDC provider for other projects.
 
-**What gets destroyed:** App Runner, Aurora DB, VPC, ECR, S3 state buckets, temporary users
-**What is preserved:** Code, workflows, Terraform modules, optionally OIDC provider
+### Manual S3 Cleanup (If Needed)
 
-**⚠️ Manual S3 Cleanup (If Needed):**
 If automated S3 state bucket cleanup fails during hibernation, manually delete it:
 
 ```bash

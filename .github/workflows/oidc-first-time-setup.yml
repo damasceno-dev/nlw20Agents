@@ -1,5 +1,23 @@
 name: "OIDC First Time Setup"
 
+description: |
+  🔐 **OIDC Initial Setup Workflow**
+
+  Performs one-time setup of GitHub OIDC authentication for secure AWS deployments.
+
+  **What it creates:**
+  - ✅ GitHub OIDC provider if not exists (shared across projects)
+  - ✅ Project-specific IAM role (minimal permissions)
+  - ✅ S3 bucket for Terraform state (encrypted, versioned)
+
+  **Security benefits:**
+  - No AWS credentials stored in GitHub
+  - Temporary credentials (1-hour TTL)
+  - Automatic credential rotation
+  - Principle of least privilege
+
+  **Run this once per AWS account before any deployments.**
+
 on:
   workflow_dispatch:
     inputs:

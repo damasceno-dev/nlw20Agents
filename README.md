@@ -61,9 +61,9 @@
 nlw20Agents/
 ├── .github/
 │   └── workflows/
-│       ├── oidc-first-time-setup.yml     # One-time OIDC setup (oidc configuration and project specific role)
-│       ├── deploy-with-oidc.yml          # Main deployment workflow
-│       └── hibernate-project.yml         # Unactivate costs resources and OIDC role
+│       ├── oidc-first-time-setup.yml     # 🔐 OIDC authentication setup
+│       ├── deploy-with-oidc.yml          # 🚀 Infrastructure deployment
+│       └── hibernate-project.yml         # 🛌 Cost hibernation
 ├── infra/
 │   ├── 1-oidc/                         # GitHub OIDC setup
 │   ├── 2-resources/                    # VPC, Aurora, ECR
@@ -76,16 +76,25 @@ nlw20Agents/
 └── prepare_secrets.sh                 # Secrets validation script
 ```
 
-## 🚀 Deployment
+## 🚀 Deployment & Workflows
 
 For complete deployment instructions with AWS OIDC setup, see **[DEPLOYMENT.md](DEPLOYMENT.md)**
 
-**Quick Overview:**
-- Secure GitHub OIDC authentication (no AWS credentials stored)
-- Complete AWS infrastructure as code
-- Manual deployment workflows with change detection
-- Full teardown capabilities
-- Cost estimates: ~$50-150/month depending on usage
+### 📋 Available Workflows
+
+| Workflow | Purpose | Cost Impact |
+|----------|---------|-------------|
+| `oidc-first-time-setup.yml` | 🔐 One-time OIDC setup | None |
+| `deploy-with-oidc.yml` | 🚀 Full infrastructure deployment | ~$50-150/month |
+| `hibernate-project.yml` | 🛌 Zero-cost hibernation | **$0/month** |
+
+**Quick Start:**
+1. **Setup OIDC:** Run `oidc-first-time-setup.yml` once per AWS account
+2. **Deploy:** Run `deploy-with-oidc.yml` to deploy all infrastructure
+3. **Hibernate:** Run `hibernate-project.yml` to achieve zero-cost hibernation
+4. **Reactivate:** Run `deploy-with-oidc.yml` to restore from hibernation
+
+> 📖 **Detailed workflow documentation** including step-by-step instructions, cost breakdowns, and troubleshooting is available in **[DEPLOYMENT.md](DEPLOYMENT.md)**
 
 ## 🔧 Development Workflow
 
