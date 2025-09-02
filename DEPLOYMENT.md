@@ -157,6 +157,11 @@ This setup is designed for **per-project isolation** with shared OIDC infrastruc
 - **Subsequent Projects**: Detects existing OIDC provider, skips creation, creates only project role
 - **Clear Logging**: Shows exactly what's being created vs reused
 
+**_OIDC Provider_**: GitHub OIDC trust relationship with AWS, one per aws account. 
+Can be reused across projects.
+
+**_OIDC Role_**: IAM role that allows GitHub to assume it. One per project (uses prefixed project name).
+
 ### 🚀 Using This as a Template:
 
 **For Each New Project:**
@@ -172,28 +177,6 @@ This setup is designed for **per-project isolation** with shared OIDC infrastruc
    - Add `INITIAL_SECRETS_B64` and `SECRETS_B64` to GitHub repository secrets
 5. **Run OIDC setup workflow** - it will detect existing OIDC and create only project resources
 
-### ♻️ Cleanup Per Project:
-Each project can be completely destroyed independently without affecting others.
-
-**To cleanup OIDC role for this project:**
-1. Go to **Actions** → **"Cleanup OIDC Role"**
-2. Type `DESTROY-ROLE` to confirm
-3. Choose whether to keep the shared OIDC provider (recommended if other projects use it)
-4. Manually delete the S3 bucket: `{prefix}-terraform-state-unique1029`
-
-**4.1 Run OIDC Setup Workflow**
-1. Go to **Actions** tab in your GitHub repository
-2. Select **"OIDC First Time Setup"** workflow
-3. Click **"Run workflow"**
-4. Type `SETUP` to confirm
-5. Wait for completion (~5 minutes)
-
-**4.2 Verify OIDC Setup**
-The workflow will (create if missing, or verify if existing):
-- GitHub OIDC provider in AWS (one-time per account)
-- GitHub deployment role for this repository (per repo)
-- Test OIDC authentication
-- Output the role ARN for verification
 
 ### Step 5: Test Full Deployment (Before Cleanup!)
 
@@ -203,7 +186,7 @@ The workflow will (create if missing, or verify if existing):
 2. **Confirm all resources deploy successfully** (infrastructure, server, app runner)
 3. **Only proceed to cleanup after successful deployment**
 
-> **Why?** If OIDC has permission issues or other problems, you'll need the temporary credentials to fix them. Don't delete your safety net until you know everything works!
+> **Why?** If OIDC has permission issues or other problems, you will need the temporary credentials to fix them. Don't delete your safety net until you know everything works!
 
 ### Step 6: Security Cleanup (ONLY AFTER SUCCESSFUL DEPLOYMENT)
 
@@ -235,33 +218,23 @@ For comprehensive cost analysis including AWS Amplify, service-by-service breakd
 
 ## 🏗️ Deployment Workflows
 
-After OIDC setup, you have three **manual deployment** options:
+After OIDC setup, you can trigger Deploy with OIDC again and terraform will detect and apply any changes
 
 > 🎯 **All workflows are manual-only** - No automatic deployments occur. You have full control over when and what gets deployed.
 
-### Option 1: Full Deployment (Manual)
 ```bash
 # GitHub Actions → "Deploy with OIDC" → Run workflow
 # Choose which components to deploy:
 # ✅ Deploy Infrastructure
 # ✅ Deploy Server  
 # ✅ Deploy App Runner
+# ✅ Deploy Amplify
+# ✅ Configure App Runner CORS with Amplify URL
 ```
 
-### Option 2: Smart Deployment (Manual with Change Detection)
-The `deploy-on-change.yml` workflow can be manually triggered and automatically detects which components changed since the last deployment:
+## 🗑️ Infrastructure Teardown
 
-- **Infrastructure changes** (`infra/**`) → Deploys infrastructure components
-- **Server changes** (`server/**`) → Builds and pushes new Docker image, restarts App Runner
-- **Web changes** (`web/**`) → Builds frontend (deployment target configurable)
-- **Force deploy all** → Option to deploy all components regardless of changes
-
-### Option 3: Component-Specific Deployment
-Use workflow dispatch with specific components selected for targeted deployments.
-
-## 🗑️ Infrastructure Management
-
-### Option 1: Temporary Hibernation (Recommended for Cost Savings)
+### Temporary Hibernation (Recommended for Cost Savings)
 
 Use hibernation to temporarily shut down your project while preserving the ability to easily reactivate it:
 
@@ -279,17 +252,33 @@ Use hibernation to temporarily shut down your project while preserving the abili
 - 📋 **Keeps all code and infrastructure blueprints**
 
 **What gets destroyed:** App Runner, Aurora DB, VPC, ECR, S3 state buckets, temporary users
-**What's preserved:** Code, workflows, Terraform modules, optionally OIDC provider
+**What is preserved:** Code, workflows, Terraform modules, optionally OIDC provider
 
-### Option 2: Complete Teardown (Permanent Deletion)
+**⚠️ Manual S3 Cleanup (If Needed):**
+If automated S3 state bucket cleanup fails during hibernation, manually delete it:
 
-To permanently destroy all AWS resources:
+```bash
+# Replace YOUR_PREFIX with your actual prefix from .secrets file
+BUCKET_NAME="YOUR_PREFIX-terraform-state-unique1029"
 
-1. **GitHub Actions** → **"Destroy Full Stack"**
-2. Type `DESTROY` to confirm  
-3. Wait for completion (~10 minutes)
+# Delete all object versions and delete markers
+aws s3api list-object-versions --bucket "$BUCKET_NAME" \
+  --query 'Versions[].[Key,VersionId]' --output text | \
+  while read key version; do
+    aws s3api delete-object --bucket "$BUCKET_NAME" \
+      --key "$key" --version-id "$version"
+  done
 
-Destroys in proper order: App Runner → Resources → Admin → OIDC → State Buckets
+aws s3api list-object-versions --bucket "$BUCKET_NAME" \
+  --query 'DeleteMarkers[].[Key,VersionId]' --output text | \
+  while read key version; do
+    aws s3api delete-object --bucket "$BUCKET_NAME" \
+      --key "$key" --version-id "$version"
+  done
+
+# Delete the empty bucket
+aws s3api delete-bucket --bucket "$BUCKET_NAME"
+```
 
 ## 📊 Infrastructure Overview
 
@@ -343,6 +332,57 @@ For detailed cost analysis and optimization strategies, see **[COSTS.md](COSTS.m
 # OIDC role might not have ECR permissions
 # Check IAM policies in infra/1-oidc/modules/iam-policies/
 ```
+
+**6. Amplify Deployment Fails (Next.js 15 SSR Complex Setup)**
+```bash
+# Check Amplify build logs in AWS Console
+# Common Next.js 15 SSR issues with Amplify:
+
+# Issue 1: Missing deploy-manifest.json
+# Solution: Ensure web/scripts/prepare-amplify-deployment.js runs
+# This creates .amplify-hosting/deploy-manifest.json with:
+# - computeResources pointing to nodejs20.x runtime
+# - entrypoint set to server.js
+# - routes configured for SSR
+
+# Issue 2: Standalone build not found
+# Solution: Verify next.config.js has:
+# output: "standalone"
+
+# Issue 3: Static files not in correct location
+# Solution: The script copies .next/static to the standalone build
+
+# Issue 4: Server.js missing or in wrong location
+# Solution: Script ensures server.js is at compute/default root
+
+# Key Files Created by prepare-amplify-deployment.js:
+# .amplify-hosting/
+#   ├── deploy-manifest.json (SSR configuration)
+#   └── compute/default/
+#       ├── server.js (Next.js standalone server)
+#       ├── .next/static/ (static assets)
+#       └── public/ (public files)
+```
+
+**Amplify SSR Deployment Process:**
+1. `npm run build:amplify` (not regular build)
+2. Creates standalone Next.js server
+3. Generates deploy-manifest.json with compute resources
+4. Copies files to .amplify-hosting structure
+5. Amplify deploys using nodejs20.x runtime for SSR
+
+The web/scripts/prepare-amplify-deployment.js handles the complexity to deploy Next.js 15 SSR correctly:
+- Creates deploy-manifest.json with correct SSR configuration
+- Copies standalone build to .amplify-hosting/compute/default/
+- Ensures static files and public directory are in the right place
+- Moves server.js to the correct location
+
+5. Different Build Command
+
+- Must use npm run build:amplify (not regular npm run build)
+- This runs both next build AND the preparation script
+
+
 
 ### Debug Commands
 
@@ -431,8 +471,14 @@ infra/
 │       ├── aurora/      # Database configuration
 │       ├── vpc/         # Network setup
 │       └── ecr/         # Container registry
-└── 3-apprunner/         # Application hosting
-    └── main.tf          # App Runner service
+├── 3-apprunner/         # .NET API hosting
+│   ├── main.tf          # App Runner service
+│   └── modules/
+│       └── app_runner/  # App Runner module
+└── 4-amplify/           # Next.js SSR hosting
+    ├── main.tf          # Amplify app configuration
+    └── modules/
+        └── amplify/     # Amplify hosting module
 ```
 
 ## 🆘 Support

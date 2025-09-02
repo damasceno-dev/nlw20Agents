@@ -61,15 +61,14 @@
 nlw20Agents/
 ├── .github/
 │   └── workflows/
-│       ├── oidc-first-time-setup.yml   # One-time OIDC setup
-│       ├── deploy-with-oidc.yml         # Main deployment workflow
-│       ├── destroy-full-stack.yml      # Complete infrastructure teardown
-│       ├── cleanup-oidc-role.yml       # Project-specific OIDC cleanup
-│       └── deploy-on-change.yml         # Smart component deployment
+│       ├── oidc-first-time-setup.yml     # One-time OIDC setup (oidc configuration and project specific role)
+│       ├── deploy-with-oidc.yml          # Main deployment workflow
+│       └── hibernate-project.yml         # Unactivate costs resources and OIDC role
 ├── infra/
 │   ├── 1-oidc/                         # GitHub OIDC setup
 │   ├── 2-resources/                    # VPC, Aurora, ECR
-│   └── 3-apprunner/                    # App Runner service
+│   ├── 3-apprunner/                    # App Runner service (.NET API hosting)
+│   └── 4-amplify/                      # AWS Amplify (Next.js SSR hosting)
 ├── server/                             # .NET 9 Backend API
 ├── web/                               # Next.js Frontend
 ├── .initial_secrets.example           # Temporary AWS credentials
@@ -121,6 +120,32 @@ docker run --name postgres-local -e POSTGRES_PASSWORD=postgres -p 5432:5432 -d p
 ```
 
 > **Note:** The project uses PostgreSQL with the pgvector extension for vector similarity search. See `server/docker-compose.yaml` for the complete local database setup.
+
+### 🏗️ Monorepo Structure
+
+This project started as separate repositories for the frontend, backend, and infrastructure components. We consolidated them into a single monorepo to improve development workflow, deployment coordination, and code sharing.
+
+**Migration Process:**
+- Originally maintained as 3 separate repositories
+- Consolidated using safe monorepo setup procedures (see `safe_monorepo_setup.md`)
+- Preserved complete Git history from all original repositories
+- Maintains clear separation of concerns with dedicated directories
+
+**Benefits of Monorepo Approach:**
+- ✅ **Unified Deployment**: Single workflow deploys all components
+- ✅ **Shared Configuration**: Common secrets and environment variables
+- ✅ **Atomic Changes**: Frontend and backend changes deployed together
+- ✅ **Simplified CI/CD**: One repository, one set of GitHub Actions
+- ✅ **Better Code Sharing**: Easier to share types and utilities
+
+**Directory Independence:**
+Each directory (`server/`, `web/`, `infra/`) maintains its own:
+- Package management (`package.json`, `*.csproj`, `*.tf`)
+- Build processes and dependencies
+- Development workflows
+- Testing strategies
+
+This structure combines the benefits of monorepo coordination with the flexibility of independent component development.
 
 ### Environment Variables
 
