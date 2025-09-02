@@ -139,7 +139,52 @@ git push origin main
 
 ### Step 4: OIDC Setup (One-Time per AWS account; per-repo role auto-created)
 
-## Project Isolation Strategy
+**4.1 Run OIDC First-Time Setup**
+1. Go to your GitHub repository
+2. Navigate to **Actions** tab
+3. Find **"OIDC First Time Setup"** workflow
+4. Click **"Run workflow"** → **"Run workflow"**
+5. Wait for completion (~5-10 minutes)
+
+This workflow will:
+- ✅ Create or detect existing GitHub OIDC Provider in your AWS account
+- ✅ Create project-specific OIDC role with least-privilege policies
+- ✅ Set up secure GitHub → AWS authentication
+- ✅ Clean up temporary credentials automatically
+
+### Step 5: Test Full Deployment (Before Cleanup!)
+
+**🚀 CRITICAL: Test your deployment BEFORE deleting temporary credentials:**
+
+1. **Run the "Deploy with OIDC" workflow** to verify OIDC works end-to-end
+2. **Confirm all resources deploy successfully** (infrastructure, server, app runner)
+3. **Only proceed to cleanup after successful deployment**
+
+> **Why?** If OIDC has permission issues or other problems, you will need the temporary credentials to fix them. Don't delete your safety net until you know everything works!
+
+### Step 6: Final Step - Security Cleanup (ONLY AFTER SUCCESSFUL DEPLOYMENT)
+
+**⚠️ Keep temporary credentials until deployment succeeds:**
+
+1. **Delete temporary AWS user:**
+   ```bash
+   # In AWS Console: IAM → Users → temp-setup-{prefix}-{date} → Delete
+   ```
+
+2. **Delete temporary GitHub secret:**
+   ```bash
+   # GitHub repo → Settings → Secrets → INITIAL_SECRETS_B64 → Delete
+   ```
+
+3. **Clean up local files:**
+   ```bash
+   rm .initial_secrets
+   rm .initial_secrets.b64 .secrets.b64
+   ```
+
+4. **Keep only SECRETS_B64** in GitHub for all future deployments
+
+## 🏗️ Project Isolation Strategy
 
 This setup is designed for **per-project isolation** with shared OIDC infrastructure:
 
@@ -176,39 +221,6 @@ Can be reused across projects.
    - Run `./prepare_secrets.sh` to encode files
    - Add `INITIAL_SECRETS_B64` and `SECRETS_B64` to GitHub repository secrets
 5. **Run OIDC setup workflow** - it will detect existing OIDC and create only project resources
-
-
-### Step 5: Test Full Deployment (Before Cleanup!)
-
-**🚀 CRITICAL: Test your deployment BEFORE deleting temporary credentials:**
-
-1. **Run the "Deploy with OIDC" workflow** to verify OIDC works end-to-end
-2. **Confirm all resources deploy successfully** (infrastructure, server, app runner)
-3. **Only proceed to cleanup after successful deployment**
-
-> **Why?** If OIDC has permission issues or other problems, you will need the temporary credentials to fix them. Don't delete your safety net until you know everything works!
-
-### Step 6: Security Cleanup (ONLY AFTER SUCCESSFUL DEPLOYMENT)
-
-**⚠️ Keep temporary credentials until deployment succeeds:**
-
-1. **Delete temporary AWS user:**
-   ```bash
-   # In AWS Console: IAM → Users → temp-setup-{prefix}-{date} → Delete
-   ```
-
-2. **Delete temporary GitHub secret:**
-   ```bash
-   # GitHub repo → Settings → Secrets → INITIAL_SECRETS_B64 → Delete
-   ```
-
-3. **Clean up local files:**
-   ```bash
-   rm .initial_secrets
-   rm .initial_secrets.b64 .secrets.b64
-   ```
-
-4. **Keep only SECRETS_B64** in GitHub for all future deployments
 
 ## 💰 Costs and Budget
 
@@ -372,7 +384,7 @@ For detailed cost analysis and optimization strategies, see **[COSTS.md](COSTS.m
 5. Amplify deploys using nodejs20.x runtime for SSR
 
 The web/scripts/prepare-amplify-deployment.js handles the complexity to deploy Next.js 15 SSR correctly:
-- Creates deploy-manifest.json with correct SSR configuration
+- Create deploy-manifest.json with the correct SSR configuration
 - Copies standalone build to .amplify-hosting/compute/default/
 - Ensures static files and public directory are in the right place
 - Moves server.js to the correct location
