@@ -1,12 +1,22 @@
-name: "Destroy Full Stack"
+name: "Hibernate Project"
 
 on:
   workflow_dispatch:
     inputs:
-      confirm_destroy:
-        description: 'Type "DESTROY" to confirm infrastructure destruction'
+      confirm_hibernate:
+        description: 'Type "HIBERNATE" to confirm project hibernation'
         required: true
         type: string
+      cleanup_oidc_role:
+        description: 'Also cleanup OIDC role (recommended for long-term hibernation)'
+        required: true
+        type: boolean
+        default: true
+      keep_oidc_provider:
+        description: 'Keep shared OIDC provider (recommended if other projects use it)'
+        required: true
+        type: boolean
+        default: true
 
 permissions:
   id-token: write
@@ -14,7 +24,7 @@ permissions:
 
 jobs:
   validate_confirmation:
-    name: "Validate Destruction Confirmation"
+    name: "Validate Hibernation Confirmation"
     runs-on: ubuntu-latest
     outputs:
       confirmed: ${{ steps.validate.outputs.confirmed }}
@@ -26,12 +36,12 @@ jobs:
       - name: Validate Confirmation
         id: validate
         run: |
-          if [[ "${{ github.event.inputs.confirm_destroy }}" == "DESTROY" ]]; then
+          if [[ "${{ github.event.inputs.confirm_hibernate }}" == "HIBERNATE" ]]; then
             echo "confirmed=true" >> $GITHUB_OUTPUT
-            echo "✅ Destruction confirmed. Proceeding with teardown..."
+            echo "✅ Hibernation confirmed. Proceeding with cost-optimized shutdown..."
           else
             echo "confirmed=false" >> $GITHUB_OUTPUT
-            echo "❌ Confirmation failed. You must type 'DESTROY' to proceed."
+            echo "❌ Confirmation failed. You must type 'HIBERNATE' to proceed."
             exit 1
           fi
 
@@ -55,15 +65,20 @@ jobs:
         working-directory: infra/1-oidc
         run: |
           terraform init -reconfigure
-          OIDC_ROLE_ARN=$(terraform output -raw github_role_arn)
-          echo "role_arn=${OIDC_ROLE_ARN}" >> $GITHUB_OUTPUT
-          echo "OIDC_ROLE_ARN=${OIDC_ROLE_ARN}" >> $GITHUB_ENV
+          OIDC_ROLE_ARN=$(terraform output -raw github_deploy_role_arn 2>/dev/null || echo "")
+          if [ -n "$OIDC_ROLE_ARN" ]; then
+            echo "role_arn=${OIDC_ROLE_ARN}" >> $GITHUB_OUTPUT
+          else
+            echo "⚠️ No OIDC role found - may already be cleaned up"
+            echo "role_arn=" >> $GITHUB_OUTPUT
+          fi
 
-  destroy_app_runner:
-    name: "Destroy App Runner"
+  # Step 1: Destroy expensive resources first
+  hibernate_app_runner:
+    name: "🏃‍♂️ Hibernate App Runner"
     runs-on: ubuntu-latest
     needs: validate_confirmation
-    if: ${{ needs.validate_confirmation.outputs.confirmed == 'true' }}
+    if: ${{ needs.validate_confirmation.outputs.confirmed == 'true' && needs.validate_confirmation.outputs.oidc_role_arn != '' }}
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
@@ -88,18 +103,20 @@ jobs:
         with:
           role-to-assume: ${{ needs.validate_confirmation.outputs.oidc_role_arn }}
           aws-region: ${{ env.AWS_REGION }}
-          role-session-name: GitHubActions-DestroyAppRunner
+          role-session-name: GitHubActions-HibernateAppRunner
 
-      - name: Terraform Init & Destroy (App Runner)
+      - name: Terraform Destroy App Runner
         working-directory: infra/3-apprunner
         run: |
           terraform init -reconfigure
           terraform destroy -auto-approve
+          echo "💤 App Runner hibernated - no more compute costs"
 
-  destroy_resources:
-    name: "Destroy AWS Resources"
+  hibernate_resources:
+    name: "🗄️ Hibernate AWS Resources"
     runs-on: ubuntu-latest
-    needs: [validate_confirmation, destroy_app_runner]
+    needs: [validate_confirmation, hibernate_app_runner]
+    if: ${{ needs.validate_confirmation.outputs.confirmed == 'true' && needs.validate_confirmation.outputs.oidc_role_arn != '' }}
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
@@ -129,22 +146,20 @@ jobs:
         with:
           role-to-assume: ${{ needs.validate_confirmation.outputs.oidc_role_arn }}
           aws-region: ${{ env.AWS_REGION }}
-          role-session-name: GitHubActions-DestroyResources
+          role-session-name: GitHubActions-HibernateResources
 
-      - name: Terraform Init & Destroy (Resources)
+      - name: Terraform Destroy Resources
         working-directory: infra/2-resources
         run: |
-          if [ -f "terraform.tfstate" ]; then
-            terraform init -migrate-state -force-copy
-          else
-            terraform init -reconfigure
-          fi
+          terraform init -reconfigure
           terraform destroy -auto-approve -var-file=terraform.tfvars
+          echo "💤 RDS, VPC, ECR hibernated - major cost savings achieved"
 
-  destroy_admin:
-    name: "Destroy Admin Infrastructure"
+  hibernate_admin:
+    name: "👥 Hibernate Admin Infrastructure"
     runs-on: ubuntu-latest
-    needs: [validate_confirmation, destroy_resources]
+    needs: [validate_confirmation, hibernate_resources]
+    if: ${{ needs.validate_confirmation.outputs.confirmed == 'true' && needs.validate_confirmation.outputs.oidc_role_arn != '' }}
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
@@ -175,18 +190,21 @@ jobs:
         with:
           role-to-assume: ${{ needs.validate_confirmation.outputs.oidc_role_arn }}
           aws-region: ${{ env.AWS_REGION }}
-          role-session-name: GitHubActions-DestroyAdmin
+          role-session-name: GitHubActions-HibernateAdmin
 
-      - name: Terraform Init & Destroy (Admin)
+      - name: Terraform Destroy Admin
         working-directory: infra/1-admin
         run: |
           terraform init -reconfigure
           terraform destroy -auto-approve -var-file=terraform.tfvars
+          echo "💤 Admin infrastructure hibernated"
 
-  cleanup_prerequisites:
-    name: "Cleanup Prerequisites (S3 State Bucket & Temp IAM Users)"
+  # Step 2: Cleanup S3 state bucket and temp resources
+  cleanup_state_bucket:
+    name: "🗄️ Cleanup State Bucket"
     runs-on: ubuntu-latest
-    needs: [validate_confirmation, destroy_admin]
+    needs: [validate_confirmation, hibernate_admin]
+    if: ${{ needs.validate_confirmation.outputs.confirmed == 'true' && needs.validate_confirmation.outputs.oidc_role_arn != '' }}
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
@@ -207,7 +225,7 @@ jobs:
         with:
           role-to-assume: ${{ needs.validate_confirmation.outputs.oidc_role_arn }}
           aws-region: ${{ env.AWS_REGION }}
-          role-session-name: GitHubActions-CleanupPrereqs
+          role-session-name: GitHubActions-CleanupState
 
       - name: Delete S3 Terraform State Bucket(s) if exist
         env:
@@ -221,9 +239,9 @@ jobs:
           else
             for B in $BUCKETS; do
               echo "Deleting bucket: $B (force, will remove all objects and versions)"
-              # Ensure bucket is in our region; if not, still attempt deletion (S3 is global but location matters for some APIs)
               aws s3 rb s3://$B --force || echo "Warning: failed to delete $B (may not exist or already deleted)"
             done
+            echo "💤 Terraform state buckets cleaned up"
           fi
 
       - name: Delete temporary IAM users if exist
@@ -269,12 +287,15 @@ jobs:
               echo "- Deleting user $U"
               aws iam delete-user --user-name "$U" || true
             done
+            echo "💤 Temporary IAM users cleaned up"
           fi
 
-  destroy_oidc:
-    name: "Destroy OIDC Infrastructure"
+  # Step 3: Optionally cleanup OIDC role
+  cleanup_oidc_role:
+    name: "🔐 Cleanup OIDC Role"
     runs-on: ubuntu-latest
-    needs: [validate_confirmation, destroy_admin, cleanup_prerequisites]
+    needs: [validate_confirmation, cleanup_state_bucket]
+    if: ${{ needs.validate_confirmation.outputs.confirmed == 'true' && github.event.inputs.cleanup_oidc_role == 'true' && needs.validate_confirmation.outputs.oidc_role_arn != '' }}
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
@@ -291,14 +312,7 @@ jobs:
           echo "TF_VAR_PREFIX=${TF_VAR_PREFIX}" >> $GITHUB_ENV
           echo "GITHUB_ORG=${GITHUB_ORG}" >> $GITHUB_ENV
           echo "GITHUB_REPO=${GITHUB_REPO}" >> $GITHUB_ENV
-          
-          cat <<EOF > infra/1-oidc/terraform.tfvars
-          prefix = "${TF_VAR_PREFIX}"
-          github_org = "${GITHUB_ORG}"
-          github_repo = "${GITHUB_REPO}"
-          aws_region = "${AWS_REGION}"
-          aws_account_id = "${AWS_ACCOUNT_ID}"
-          EOF
+          echo "AWS_ACCOUNT_ID=${AWS_ACCOUNT_ID}" >> $GITHUB_ENV
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
@@ -310,37 +324,114 @@ jobs:
         with:
           role-to-assume: ${{ needs.validate_confirmation.outputs.oidc_role_arn }}
           aws-region: ${{ env.AWS_REGION }}
-          role-session-name: GitHubActions-DestroyOIDC
+          role-session-name: GitHubActions-CleanupOIDC
 
-      - name: Terraform Init & Destroy (OIDC)
+      - name: Configure Terraform Backend
+        working-directory: infra/1-oidc
+        run: |
+          cat <<EOF > backend.tf
+          terraform {
+            backend "s3" {
+              bucket = "${TF_VAR_PREFIX}-terraform-state-unique1029"
+              key    = "oidc/terraform.tfstate"
+              region = "${AWS_REGION}"
+            }
+          }
+          EOF
+
+      - name: Configure Terraform Variables
+        run: |
+          cat <<EOF > infra/1-oidc/terraform.tfvars
+          prefix = "${TF_VAR_PREFIX}"
+          github_org = "${GITHUB_ORG}"
+          github_repo = "${GITHUB_REPO}"
+          aws_region = "${AWS_REGION}"
+          aws_account_id = "${AWS_ACCOUNT_ID}"
+          EOF
+
+      - name: Selective OIDC Destroy
         working-directory: infra/1-oidc
         run: |
           terraform init -reconfigure
-          terraform destroy -auto-approve -var-file=terraform.tfvars
+          
+          if [ "${{ github.event.inputs.keep_oidc_provider }}" == "true" ]; then
+            echo "🗑️ Destroying only project role (keeping shared OIDC provider)..."
+            # Target only role and attachments
+            terraform destroy -auto-approve -var-file=terraform.tfvars \
+              -target=aws_iam_role.github_deploy \
+              -target=aws_iam_role_policy_attachment.attach_vpc \
+              -target=aws_iam_role_policy_attachment.attach_rds \
+              -target=aws_iam_role_policy_attachment.attach_ecr \
+              -target=aws_iam_role_policy_attachment.attach_app_runner \
+              -target=aws_iam_role_policy_attachment.attach_iam \
+              -target=aws_iam_role_policy_attachment.attach_s3 \
+              -target=aws_iam_role_policy_attachment.attach_cloudwatch \
+              -target=aws_iam_role_policy_attachment.attach_sqs
+          else
+            echo "🗑️ Destroying project role AND shared OIDC provider..."
+            terraform destroy -auto-approve -var-file=terraform.tfvars
+          fi
+          
+          echo "🔐 OIDC cleanup complete"
 
-  cleanup_summary:
-    name: "Destruction Summary"
+  hibernation_summary:
+    name: "😴 Hibernation Summary"
     runs-on: ubuntu-latest
-    needs: [destroy_oidc]
+    needs: [validate_confirmation, cleanup_oidc_role]
+    if: always() && needs.validate_confirmation.outputs.confirmed == 'true'
     steps:
-      - name: Summary
+      - name: Generate Hibernation Summary
         run: |
-          echo "## 🗑️ Complete Infrastructure Destroyed!" >> $GITHUB_STEP_SUMMARY
+          echo "## 😴 Project Successfully Hibernated!" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "All AWS resources have been successfully destroyed using OIDC authentication." >> $GITHUB_STEP_SUMMARY
+          echo "Your project is now in cost-optimized hibernation mode." >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### ✅ Resources Removed:" >> $GITHUB_STEP_SUMMARY
-          echo "- App Runner Service" >> $GITHUB_STEP_SUMMARY
-          echo "- Aurora Database & VPC" >> $GITHUB_STEP_SUMMARY
-          echo "- ECR Repository" >> $GITHUB_STEP_SUMMARY
-          echo "- IAM Roles and Policies" >> $GITHUB_STEP_SUMMARY
-          echo "- OIDC Provider & GitHub Role" >> $GITHUB_STEP_SUMMARY
-          echo "- Terraform State S3 Bucket(s) (if any)" >> $GITHUB_STEP_SUMMARY
-          echo "- Temporary IAM setup user(s) (if any)" >> $GITHUB_STEP_SUMMARY
+          echo "### 💰 Resources Destroyed (No More Costs):" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ App Runner Service (compute costs eliminated)" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ RDS Aurora Database (storage costs eliminated)" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ VPC and Networking (NAT Gateway costs eliminated)" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ ECR Repository (storage costs eliminated)" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Admin IAM roles and policies" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Terraform state buckets and temporary users" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### 🔐 Security Benefits Used:" >> $GITHUB_STEP_SUMMARY
-          echo "- No AWS credentials stored in GitHub" >> $GITHUB_STEP_SUMMARY
-          echo "- Temporary credentials with 1-hour TTL" >> $GITHUB_STEP_SUMMARY
-          echo "- Complete audit trail in CloudWatch" >> $GITHUB_STEP_SUMMARY
+          
+          if [ "${{ github.event.inputs.cleanup_oidc_role }}" == "true" ]; then
+            echo "### 🔐 Security Cleanup:" >> $GITHUB_STEP_SUMMARY
+            if [ "${{ github.event.inputs.keep_oidc_provider }}" == "true" ]; then
+              echo "- ✅ Project OIDC role deleted" >> $GITHUB_STEP_SUMMARY
+              echo "- ✅ Shared OIDC provider preserved (for other projects)" >> $GITHUB_STEP_SUMMARY
+            else
+              echo "- ✅ Project OIDC role deleted" >> $GITHUB_STEP_SUMMARY
+              echo "- ✅ Shared OIDC provider deleted" >> $GITHUB_STEP_SUMMARY
+            fi
+          else
+            echo "### 🔐 OIDC Preserved:" >> $GITHUB_STEP_SUMMARY
+            echo "- ℹ️ OIDC role kept for easy reactivation" >> $GITHUB_STEP_SUMMARY
+          fi
+          
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "⚠️ **Note**: Verify in AWS Console that all resources are removed" >> $GITHUB_STEP_SUMMARY
+          echo "### 🚀 Reactivation Process:" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          if [ "${{ github.event.inputs.cleanup_oidc_role }}" == "true" ]; then
+            echo "**When you return:**" >> $GITHUB_STEP_SUMMARY
+            echo "1. Run \`oidc-first-time-setup.yml\` (will reuse existing provider if available)" >> $GITHUB_STEP_SUMMARY
+            echo "2. Run \`deploy-with-oidc.yml\` to recreate all resources" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "**When you return:**" >> $GITHUB_STEP_SUMMARY
+            echo "1. Simply run \`deploy-with-oidc.yml\` (OIDC already configured)" >> $GITHUB_STEP_SUMMARY
+            echo "2. All resources will be recreated from scratch" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 💡 What's Preserved:" >> $GITHUB_STEP_SUMMARY
+          echo "- 📁 All code and configurations" >> $GITHUB_STEP_SUMMARY
+          echo "- 🔧 GitHub repository and workflows" >> $GITHUB_STEP_SUMMARY
+          echo "- 📋 Infrastructure blueprints (Terraform modules)" >> $GITHUB_STEP_SUMMARY
+          
+          if [ "${{ github.event.inputs.keep_oidc_provider }}" == "true" ]; then
+            echo "- 🔐 OIDC provider (if shared with other projects)" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**💸 Estimated monthly savings: ~$100-500+ depending on your usage**" >> $GITHUB_STEP_SUMMARY

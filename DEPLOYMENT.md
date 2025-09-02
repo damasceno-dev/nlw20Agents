@@ -231,7 +231,7 @@ The workflow will (create if missing, or verify if existing):
 
 For comprehensive cost analysis including AWS Amplify, service-by-service breakdowns, and optimization strategies, see **[COSTS.md](COSTS.md)**.
 
-**Quick Summary:** Expect $109-156/month for development, $160-340/month for production. Use the "Destroy with OIDC" workflow to save costs when not in use.
+**Quick Summary:** Expect $109-156/month for development, $160-340/month for production. Use the "Hibernate Project" workflow to eliminate costs when not in use (~$100-500/month savings).
 
 ## 🏗️ Deployment Workflows
 
@@ -259,15 +259,37 @@ The `deploy-on-change.yml` workflow can be manually triggered and automatically 
 ### Option 3: Component-Specific Deployment
 Use workflow dispatch with specific components selected for targeted deployments.
 
-## 🗑️ Infrastructure Teardown
+## 🗑️ Infrastructure Management
 
-To destroy all AWS resources:
+### Option 1: Temporary Hibernation (Recommended for Cost Savings)
+
+Use hibernation to temporarily shut down your project while preserving the ability to easily reactivate it:
+
+1. **GitHub Actions** → **"Hibernate Project"**
+2. Type `HIBERNATE` to confirm
+3. Configure options:
+   - **Cleanup OIDC role**: ✅ Recommended for long-term hibernation
+   - **Keep OIDC provider**: ✅ Recommended if you have other projects
+4. Wait for completion (~10 minutes)
+
+**Benefits of Hibernation:**
+- 💰 **Eliminates ~$100-500/month** in AWS costs
+- 🚀 **Easy reactivation** - just run deploy workflow when you return
+- 🔐 **Optionally preserves OIDC** for instant restart
+- 📋 **Keeps all code and infrastructure blueprints**
+
+**What gets destroyed:** App Runner, Aurora DB, VPC, ECR, S3 state buckets, temporary users
+**What's preserved:** Code, workflows, Terraform modules, optionally OIDC provider
+
+### Option 2: Complete Teardown (Permanent Deletion)
+
+To permanently destroy all AWS resources:
 
 1. **GitHub Actions** → **"Destroy Full Stack"**
-2. Type `DESTROY` to confirm
+2. Type `DESTROY` to confirm  
 3. Wait for completion (~10 minutes)
 
-Destroys in proper order: App Runner → Resources → Admin → OIDC
+Destroys in proper order: App Runner → Resources → Admin → OIDC → State Buckets
 
 ## 📊 Infrastructure Overview
 

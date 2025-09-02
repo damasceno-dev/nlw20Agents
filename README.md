@@ -35,7 +35,7 @@
 - AI Integration (OpenAI GPT)
 - Clean Architecture patterns
 - Entity Framework Core
-- PostgreSQL database
+- PostgreSQL database with pgvector extension
 
 **☁️ Infrastructure**
 - Complete AWS infrastructure as code
@@ -108,13 +108,19 @@ npm run dev
 # Web app available at: http://localhost:3000
 ```
 
-**Database (Local)**
+**Database (PostgreSQL with pgvector)**
 ```bash
-# Option 1: Use Docker
-docker run --name postgres-local -e POSTGRES_PASSWORD=postgres -p 5432:5432 -d postgres:15
+# Use Docker Compose for local database with pgvector extension
+cd server
+docker-compose up -d
 
-# Option 2: Connect to deployed Aurora (use connection string from AWS Console)
+# Alternative: Manual Docker setup
+docker run --name postgres-local -e POSTGRES_PASSWORD=postgres -p 5432:5432 -d pgvector/pgvector:pg17
+
+# Option 3: Connect to deployed Aurora (use connection string from AWS Console)
 ```
+
+> **Note:** The project uses PostgreSQL with the pgvector extension for vector similarity search. See `server/docker-compose.yaml` for the complete local database setup.
 
 ### Environment Variables
 
