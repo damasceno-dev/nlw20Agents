@@ -199,12 +199,189 @@ jobs:
           terraform destroy -auto-approve -var-file=terraform.tfvars
           echo "💤 Admin infrastructure hibernated"
 
-  # Step 2: Cleanup S3 state bucket and temp resources
-  cleanup_state_bucket:
-    name: "🗄️ Cleanup State Bucket"
+  # Step 2: Optionally cleanup OIDC role FIRST (while S3 backend still exists)
+  cleanup_oidc_role:
+    name: "🔐 Cleanup OIDC Role"
     runs-on: ubuntu-latest
     needs: [validate_confirmation, hibernate_admin]
-    if: ${{ needs.validate_confirmation.outputs.confirmed == 'true' && needs.validate_confirmation.outputs.oidc_role_arn != '' }}
+    if: ${{ needs.validate_confirmation.outputs.confirmed == 'true' && github.event.inputs.cleanup_oidc_role == 'true' && needs.validate_confirmation.outputs.oidc_role_arn != '' }}
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Create .secrets file
+        run: |
+          echo "${{ secrets.SECRETS_B64 }}" | base64 -d > .secrets
+          chmod 600 .secrets
+
+      - name: Load Environment Variables
+        run: |
+          export $(grep -v '^#' .secrets | grep -v '^$' | xargs)
+          echo "AWS_REGION=${AWS_REGION}" >> $GITHUB_ENV
+          echo "TF_VAR_PREFIX=${TF_VAR_PREFIX}" >> $GITHUB_ENV
+          echo "GITHUB_ORG=${GITHUB_ORG}" >> $GITHUB_ENV
+          echo "GITHUB_REPO=${GITHUB_REPO}" >> $GITHUB_ENV
+          echo "AWS_ACCOUNT_ID=${AWS_ACCOUNT_ID}" >> $GITHUB_ENV
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.6.0"
+
+      - name: Configure AWS Credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ needs.validate_confirmation.outputs.oidc_role_arn }}
+          aws-region: ${{ env.AWS_REGION }}
+          role-session-name: GitHubActions-CleanupOIDC
+
+      - name: Configure Terraform Backend (S3 - normal cleanup)
+        working-directory: infra/1-oidc
+        run: |
+          cat <<EOF > backend.tf
+          terraform {
+            backend "s3" {
+              bucket = "${TF_VAR_PREFIX}-terraform-state-unique1029"
+              key    = "oidc/terraform.tfstate"
+              region = "${AWS_REGION}"
+            }
+          }
+          EOF
+          echo "✅ Using S3 backend for proper OIDC cleanup"
+
+      - name: Configure Terraform Variables
+        run: |
+          cat <<EOF > infra/1-oidc/terraform.tfvars
+          prefix = "${TF_VAR_PREFIX}"
+          github_org = "${GITHUB_ORG}"
+          github_repo = "${GITHUB_REPO}"
+          aws_region = "${AWS_REGION}"
+          aws_account_id = "${AWS_ACCOUNT_ID}"
+          EOF
+
+      - name: Selective OIDC Destroy
+        working-directory: infra/1-oidc
+        run: |
+          terraform init -reconfigure
+          
+          if [ "${{ github.event.inputs.keep_oidc_provider }}" == "true" ]; then
+            echo "🗑️ Destroying only project role (keeping shared OIDC provider)..."
+            # Target only role and attachments
+            terraform destroy -auto-approve -var-file=terraform.tfvars \
+              -target=aws_iam_role.github_deploy \
+              -target=aws_iam_role_policy_attachment.attach_vpc \
+              -target=aws_iam_role_policy_attachment.attach_rds \
+              -target=aws_iam_role_policy_attachment.attach_ecr \
+              -target=aws_iam_role_policy_attachment.attach_app_runner \
+              -target=aws_iam_role_policy_attachment.attach_iam \
+              -target=aws_iam_role_policy_attachment.attach_s3 \
+              -target=aws_iam_role_policy_attachment.attach_cloudwatch \
+              -target=aws_iam_role_policy_attachment.attach_sqs
+          else
+            echo "🗑️ Destroying project role AND shared OIDC provider..."
+            terraform destroy -auto-approve -var-file=terraform.tfvars
+          fi
+          
+          echo "🔐 OIDC cleanup complete"
+
+      - name: Delete S3 Terraform State Bucket(s) after OIDC cleanup
+        env:
+          PREFIX: ${{ env.TF_VAR_PREFIX }}
+        run: |
+          set -euo pipefail
+          echo "🗄️ Cleaning up S3 state buckets after OIDC role deletion..."
+          echo "Looking for S3 buckets starting with: ${PREFIX}-terraform-state-"
+          BUCKETS=$(aws s3api list-buckets --query "Buckets[?starts_with(Name, \`${PREFIX}-terraform-state-\`)].Name" --output text || true)
+          if [ -z "$BUCKETS" ]; then
+            echo "No matching state buckets found."
+          else
+            for B in $BUCKETS; do
+              echo "Deleting bucket: $B (handling versioning and objects)"
+              
+              # Check if bucket exists (might have been deleted by another process)
+              if ! aws s3api head-bucket --bucket "$B" 2>/dev/null; then
+                echo "Bucket $B does not exist, skipping"
+                continue
+              fi
+              
+              # Delete all object versions (including delete markers)
+              echo "- Deleting all object versions and delete markers..."
+              aws s3api list-object-versions --bucket "$B" \
+                --query 'Versions[].[Key,VersionId]' --output text | \
+                while read key version; do
+                  if [ -n "$key" ] && [ -n "$version" ]; then
+                    aws s3api delete-object --bucket "$B" --key "$key" --version-id "$version" || true
+                  fi
+                done
+              
+              # Delete delete markers
+              aws s3api list-object-versions --bucket "$B" \
+                --query 'DeleteMarkers[].[Key,VersionId]' --output text | \
+                while read key version; do
+                  if [ -n "$key" ] && [ -n "$version" ]; then
+                    aws s3api delete-object --bucket "$B" --key "$key" --version-id "$version" || true
+                  fi
+                done
+              
+              # Now delete the empty bucket
+              echo "- Deleting empty bucket..."
+              aws s3api delete-bucket --bucket "$B" || echo "Warning: failed to delete bucket $B"
+            done
+            echo "💤 S3 Terraform state buckets cleaned up after OIDC deletion"
+          fi
+
+      - name: Delete temporary IAM users if exist
+        env:
+          PREFIX: ${{ env.TF_VAR_PREFIX }}
+        run: |
+          set -euo pipefail
+          echo "Looking for IAM users starting with: temp-setup-${PREFIX}-"
+          USERS=$(aws iam list-users --query "Users[?starts_with(UserName, \`temp-setup-${PREFIX}-\`)].UserName" --output text || true)
+          if [ -z "$USERS" ]; then
+            echo "No matching temp setup users found."
+          else
+            for U in $USERS; do
+              echo "Cleaning up IAM user: $U"
+              # Delete access keys
+              KEYS=$(aws iam list-access-keys --user-name "$U" --query 'AccessKeyMetadata[].AccessKeyId' --output text || true)
+              for K in $KEYS; do
+                echo "- Deleting access key $K"
+                aws iam delete-access-key --user-name "$U" --access-key-id "$K" || true
+              done
+              # Detach managed policies
+              POLS=$(aws iam list-attached-user-policies --user-name "$U" --query 'AttachedPolicies[].PolicyArn' --output text || true)
+              for P in $POLS; do
+                echo "- Detaching policy $P"
+                aws iam detach-user-policy --user-name "$U" --policy-arn "$P" || true
+              done
+              # Remove inline policies
+              INLINES=$(aws iam list-user-policies --user-name "$U" --query 'PolicyNames[]' --output text || true)
+              for IP in $INLINES; do
+                echo "- Deleting inline policy $IP"
+                aws iam delete-user-policy --user-name "$U" --policy-name "$IP" || true
+              done
+              # Remove from groups
+              GROUPS=$(aws iam list-groups-for-user --user-name "$U" --query 'Groups[].GroupName' --output text || true)
+              for G in $GROUPS; do
+                echo "- Removing from group $G"
+                aws iam remove-user-from-group --user-name "$U" --group-name "$G" || true
+              done
+              # Delete login profile if exists
+              echo "- Deleting login profile (if any)"
+              aws iam delete-login-profile --user-name "$U" || true
+              # Finally delete the user
+              echo "- Deleting user $U"
+              aws iam delete-user --user-name "$U" || true
+            done
+            echo "💤 Temporary IAM users cleaned up"
+          fi
+
+  # Step 3: Cleanup S3 state bucket and temp resources (only if OIDC role still exists)
+  cleanup_state_bucket:
+    name: "🗄️ Cleanup State Bucket & Temp Users"
+    runs-on: ubuntu-latest
+    needs: [validate_confirmation, hibernate_admin]
+    if: ${{ needs.validate_confirmation.outputs.confirmed == 'true' && github.event.inputs.cleanup_oidc_role == 'false' && needs.validate_confirmation.outputs.oidc_role_arn != '' }}
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
@@ -238,8 +415,36 @@ jobs:
             echo "No matching state buckets found."
           else
             for B in $BUCKETS; do
-              echo "Deleting bucket: $B (force, will remove all objects and versions)"
-              aws s3 rb s3://$B --force || echo "Warning: failed to delete $B (may not exist or already deleted)"
+              echo "Deleting bucket: $B (handling versioning and objects)"
+              
+              # Check if bucket exists (might have been deleted by another process)
+              if ! aws s3api head-bucket --bucket "$B" 2>/dev/null; then
+                echo "Bucket $B does not exist, skipping"
+                continue
+              fi
+              
+              # Delete all object versions (including delete markers)
+              echo "- Deleting all object versions and delete markers..."
+              aws s3api list-object-versions --bucket "$B" \
+                --query 'Versions[].[Key,VersionId]' --output text | \
+                while read key version; do
+                  if [ -n "$key" ] && [ -n "$version" ]; then
+                    aws s3api delete-object --bucket "$B" --key "$key" --version-id "$version" || true
+                  fi
+                done
+              
+              # Delete delete markers
+              aws s3api list-object-versions --bucket "$B" \
+                --query 'DeleteMarkers[].[Key,VersionId]' --output text | \
+                while read key version; do
+                  if [ -n "$key" ] && [ -n "$version" ]; then
+                    aws s3api delete-object --bucket "$B" --key "$key" --version-id "$version" || true
+                  fi
+                done
+              
+              # Now delete the empty bucket
+              echo "- Deleting empty bucket..."
+              aws s3api delete-bucket --bucket "$B" || echo "Warning: failed to delete bucket $B"
             done
             echo "💤 Terraform state buckets cleaned up"
           fi
@@ -290,94 +495,10 @@ jobs:
             echo "💤 Temporary IAM users cleaned up"
           fi
 
-  # Step 3: Optionally cleanup OIDC role
-  cleanup_oidc_role:
-    name: "🔐 Cleanup OIDC Role"
-    runs-on: ubuntu-latest
-    needs: [validate_confirmation, cleanup_state_bucket]
-    if: ${{ needs.validate_confirmation.outputs.confirmed == 'true' && github.event.inputs.cleanup_oidc_role == 'true' && needs.validate_confirmation.outputs.oidc_role_arn != '' }}
-    steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
-
-      - name: Create .secrets file
-        run: |
-          echo "${{ secrets.SECRETS_B64 }}" | base64 -d > .secrets
-          chmod 600 .secrets
-
-      - name: Load Environment Variables
-        run: |
-          export $(grep -v '^#' .secrets | grep -v '^$' | xargs)
-          echo "AWS_REGION=${AWS_REGION}" >> $GITHUB_ENV
-          echo "TF_VAR_PREFIX=${TF_VAR_PREFIX}" >> $GITHUB_ENV
-          echo "GITHUB_ORG=${GITHUB_ORG}" >> $GITHUB_ENV
-          echo "GITHUB_REPO=${GITHUB_REPO}" >> $GITHUB_ENV
-          echo "AWS_ACCOUNT_ID=${AWS_ACCOUNT_ID}" >> $GITHUB_ENV
-
-      - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v3
-        with:
-          terraform_version: "1.6.0"
-
-      - name: Configure AWS Credentials (OIDC)
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: ${{ needs.validate_confirmation.outputs.oidc_role_arn }}
-          aws-region: ${{ env.AWS_REGION }}
-          role-session-name: GitHubActions-CleanupOIDC
-
-      - name: Configure Terraform Backend
-        working-directory: infra/1-oidc
-        run: |
-          cat <<EOF > backend.tf
-          terraform {
-            backend "s3" {
-              bucket = "${TF_VAR_PREFIX}-terraform-state-unique1029"
-              key    = "oidc/terraform.tfstate"
-              region = "${AWS_REGION}"
-            }
-          }
-          EOF
-
-      - name: Configure Terraform Variables
-        run: |
-          cat <<EOF > infra/1-oidc/terraform.tfvars
-          prefix = "${TF_VAR_PREFIX}"
-          github_org = "${GITHUB_ORG}"
-          github_repo = "${GITHUB_REPO}"
-          aws_region = "${AWS_REGION}"
-          aws_account_id = "${AWS_ACCOUNT_ID}"
-          EOF
-
-      - name: Selective OIDC Destroy
-        working-directory: infra/1-oidc
-        run: |
-          terraform init -reconfigure
-          
-          if [ "${{ github.event.inputs.keep_oidc_provider }}" == "true" ]; then
-            echo "🗑️ Destroying only project role (keeping shared OIDC provider)..."
-            # Target only role and attachments
-            terraform destroy -auto-approve -var-file=terraform.tfvars \
-              -target=aws_iam_role.github_deploy \
-              -target=aws_iam_role_policy_attachment.attach_vpc \
-              -target=aws_iam_role_policy_attachment.attach_rds \
-              -target=aws_iam_role_policy_attachment.attach_ecr \
-              -target=aws_iam_role_policy_attachment.attach_app_runner \
-              -target=aws_iam_role_policy_attachment.attach_iam \
-              -target=aws_iam_role_policy_attachment.attach_s3 \
-              -target=aws_iam_role_policy_attachment.attach_cloudwatch \
-              -target=aws_iam_role_policy_attachment.attach_sqs
-          else
-            echo "🗑️ Destroying project role AND shared OIDC provider..."
-            terraform destroy -auto-approve -var-file=terraform.tfvars
-          fi
-          
-          echo "🔐 OIDC cleanup complete"
-
   hibernation_summary:
     name: "😴 Hibernation Summary"
     runs-on: ubuntu-latest
-    needs: [validate_confirmation, cleanup_oidc_role]
+    needs: [validate_confirmation, cleanup_oidc_role, cleanup_state_bucket]
     if: always() && needs.validate_confirmation.outputs.confirmed == 'true'
     steps:
       - name: Generate Hibernation Summary
@@ -414,9 +535,14 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           
           if [ "${{ github.event.inputs.cleanup_oidc_role }}" == "true" ]; then
-            echo "**When you return:**" >> $GITHUB_STEP_SUMMARY
-            echo "1. Run \`oidc-first-time-setup.yml\` (will reuse existing provider if available)" >> $GITHUB_STEP_SUMMARY
-            echo "2. Run \`deploy-with-oidc.yml\` to recreate all resources" >> $GITHUB_STEP_SUMMARY
+            echo "**When you return (Complete Setup Required):**" >> $GITHUB_STEP_SUMMARY
+            echo "1. **Create new S3 bucket**: \`${TF_VAR_PREFIX}-terraform-state-unique1029\` (versioned, encrypted)" >> $GITHUB_STEP_SUMMARY
+            echo "2. **Create temp AWS user**: \`temp-setup-${TF_VAR_PREFIX}-$(date +%Y%m%d)\` with AdministratorAccess" >> $GITHUB_STEP_SUMMARY
+            echo "3. **Update .initial_secrets**: Add new temp user credentials" >> $GITHUB_STEP_SUMMARY
+            echo "4. **Run** \`./prepare_secrets.sh\` and update \`INITIAL_SECRETS_B64\` in GitHub" >> $GITHUB_STEP_SUMMARY
+            echo "5. **Run** \`oidc-first-time-setup.yml\` (will reuse existing provider if available)" >> $GITHUB_STEP_SUMMARY
+            echo "6. **Run** \`deploy-with-oidc.yml\` to recreate all resources" >> $GITHUB_STEP_SUMMARY
+            echo "7. **Clean up** temp user and \`INITIAL_SECRETS_B64\` after successful deployment" >> $GITHUB_STEP_SUMMARY
           else
             echo "**When you return:**" >> $GITHUB_STEP_SUMMARY
             echo "1. Simply run \`deploy-with-oidc.yml\` (OIDC already configured)" >> $GITHUB_STEP_SUMMARY
@@ -434,4 +560,32 @@ jobs:
           fi
           
           echo "" >> $GITHUB_STEP_SUMMARY
+          if [ "${{ github.event.inputs.cleanup_oidc_role }}" == "true" ]; then
+            echo "### ⚠️ Manual S3 Cleanup (If Automated Failed):" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "If S3 bucket cleanup failed, manually delete with AWS CLI:" >> $GITHUB_STEP_SUMMARY
+            echo "\`\`\`bash" >> $GITHUB_STEP_SUMMARY
+            echo "# List and delete all object versions:" >> $GITHUB_STEP_SUMMARY
+            echo "aws s3api list-object-versions --bucket \"YOUR_PREFIX-terraform-state-unique1029\" \\" >> $GITHUB_STEP_SUMMARY
+            echo "  --query 'Versions[].[Key,VersionId]' --output text | \\" >> $GITHUB_STEP_SUMMARY
+            echo "  while read key version; do" >> $GITHUB_STEP_SUMMARY
+            echo "    aws s3api delete-object --bucket \"YOUR_PREFIX-terraform-state-unique1029\" \\" >> $GITHUB_STEP_SUMMARY
+            echo "      --key \"\$key\" --version-id \"\$version\"" >> $GITHUB_STEP_SUMMARY
+            echo "  done" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "# Delete delete markers:" >> $GITHUB_STEP_SUMMARY
+            echo "aws s3api list-object-versions --bucket \"YOUR_PREFIX-terraform-state-unique1029\" \\" >> $GITHUB_STEP_SUMMARY
+            echo "  --query 'DeleteMarkers[].[Key,VersionId]' --output text | \\" >> $GITHUB_STEP_SUMMARY
+            echo "  while read key version; do" >> $GITHUB_STEP_SUMMARY
+            echo "    aws s3api delete-object --bucket \"YOUR_PREFIX-terraform-state-unique1029\" \\" >> $GITHUB_STEP_SUMMARY
+            echo "      --key \"\$key\" --version-id \"\$version\"" >> $GITHUB_STEP_SUMMARY
+            echo "  done" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "# Finally delete the empty bucket:" >> $GITHUB_STEP_SUMMARY
+            echo "aws s3api delete-bucket --bucket \"YOUR_PREFIX-terraform-state-unique1029\"" >> $GITHUB_STEP_SUMMARY
+            echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+          fi
           echo "**💸 Estimated monthly savings: ~$100-500+ depending on your usage**" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 🎯 **TRUE ZERO COST HIBERNATION ACHIEVED!** 🎯" >> $GITHUB_STEP_SUMMARY
