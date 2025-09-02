@@ -45,11 +45,29 @@ jobs:
         run: |
           export $(grep -v '^#' .secrets | grep -v '^$' | xargs)
           echo "AWS_REGION=${AWS_REGION}" >> $GITHUB_ENV
+          echo "TF_VAR_PREFIX=${TF_VAR_PREFIX}" >> $GITHUB_ENV
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: "1.6.0"
+
+      - name: Configure Terraform Backend (OIDC)
+        working-directory: infra/1-oidc
+        run: |
+          # Configure S3 backend for Terraform state dynamically
+          cat <<EOF > backend.tf
+          terraform {
+            backend "s3" {
+              bucket = "${TF_VAR_PREFIX}-terraform-state-unique1029"
+              key    = "oidc/terraform.tfstate"
+              region = "${AWS_REGION}"
+            }
+          }
+          EOF
+        env:
+          TF_VAR_PREFIX: ${{ env.TF_VAR_PREFIX }}
+          AWS_REGION: ${{ env.AWS_REGION }}
 
       - name: Get OIDC Role ARN
         id: get_oidc_role
@@ -83,6 +101,7 @@ jobs:
         run: |
           export $(grep -v '^#' .secrets | grep -v '^$' | xargs)
           echo "AWS_REGION=${AWS_REGION}" >> $GITHUB_ENV
+          echo "TF_VAR_PREFIX=${TF_VAR_PREFIX}" >> $GITHUB_ENV
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
@@ -95,6 +114,24 @@ jobs:
           role-to-assume: ${{ needs.validate_confirmation.outputs.oidc_role_arn }}
           aws-region: ${{ env.AWS_REGION }}
           role-session-name: GitHubActions-HibernateAppRunner
+
+      - name: Configure Terraform Backend (App Runner)
+        working-directory: infra/3-apprunner
+        run: |
+          # Configure S3 backend for Terraform state dynamically
+          cat <<EOF > backend.tf
+          terraform {
+            backend "s3" {
+              bucket = "${TF_VAR_PREFIX}-terraform-state-unique1029"
+              key    = "3-apprunner/terraform.tfstate"
+              region = "${AWS_REGION}"
+              encrypt = true
+            }
+          }
+          EOF
+        env:
+          TF_VAR_PREFIX: ${{ env.TF_VAR_PREFIX }}
+          AWS_REGION: ${{ env.AWS_REGION }}
 
       - name: Terraform Destroy App Runner
         working-directory: infra/3-apprunner
@@ -184,8 +221,9 @@ jobs:
         run: |
           export $(grep -v '^#' .secrets | grep -v '^$' | xargs)
           echo "AWS_REGION=${AWS_REGION}" >> $GITHUB_ENV
+          echo "TF_VAR_PREFIX=${TF_VAR_PREFIX}" >> $GITHUB_ENV
           echo "TF_VAR_DB_PASSWORD=${TF_VAR_DB_PASSWORD}" >> $GITHUB_ENV
-          
+
           cat <<EOF > infra/2-resources/terraform.tfvars
           db_password = "${TF_VAR_DB_PASSWORD}"
           EOF
@@ -201,6 +239,24 @@ jobs:
           role-to-assume: ${{ needs.validate_confirmation.outputs.oidc_role_arn }}
           aws-region: ${{ env.AWS_REGION }}
           role-session-name: GitHubActions-HibernateResources
+
+      - name: Configure Terraform Backend (Resources)
+        working-directory: infra/2-resources
+        run: |
+          # Configure S3 backend for Terraform state dynamically
+          cat <<EOF > backend.tf
+          terraform {
+            backend "s3" {
+              bucket = "${TF_VAR_PREFIX}-terraform-state-unique1029"
+              key    = "2-resources/terraform.tfstate"
+              region = "${AWS_REGION}"
+              encrypt = true
+            }
+          }
+          EOF
+        env:
+          TF_VAR_PREFIX: ${{ env.TF_VAR_PREFIX }}
+          AWS_REGION: ${{ env.AWS_REGION }}
 
       - name: Terraform Destroy Resources
         working-directory: infra/2-resources
@@ -269,33 +325,12 @@ jobs:
           aws_account_id = "${AWS_ACCOUNT_ID}"
           EOF
 
-      - name: OIDC Cleanup
-        working-directory: infra/1-oidc
-        run: |
-          terraform init -reconfigure
-
-          echo "🗑️ Destroying OIDC role (preserving shared OIDC provider)..."
-          # Always destroy role and attachments, preserve shared provider
-          terraform destroy -auto-approve -var-file=terraform.tfvars \
-            -target=aws_iam_role.github_deploy \
-            -target=aws_iam_role_policy_attachment.attach_vpc \
-            -target=aws_iam_role_policy_attachment.attach_rds \
-            -target=aws_iam_role_policy_attachment.attach_ecr \
-            -target=aws_iam_role_policy_attachment.attach_app_runner \
-            -target=aws_iam_role_policy_attachment.attach_iam \
-            -target=aws_iam_role_policy_attachment.attach_s3 \
-            -target=aws_iam_role_policy_attachment.attach_cloudwatch \
-            -target=aws_iam_role_policy_attachment.attach_sqs \
-            -target=aws_iam_role_policy_attachment.attach_amplify
-
-          echo "🔐 OIDC role destroyed (shared provider preserved)"
-
-      - name: Delete S3 Terraform State Bucket(s) after OIDC cleanup
+      - name: Delete S3 Terraform State Bucket(s)
         env:
           PREFIX: ${{ env.TF_VAR_PREFIX }}
         run: |
           set -euo pipefail
-          echo "🗄️ Cleaning up S3 state buckets after OIDC role deletion..."
+          echo "🗄️ Cleaning up S3 state buckets (while OIDC role still exists)..."
           echo "Looking for S3 buckets starting with: ${PREFIX}-terraform-state-"
           BUCKETS=$(aws s3api list-buckets --query "Buckets[?starts_with(Name, \`${PREFIX}-terraform-state-\`)].Name" --output text || true)
           if [ -z "$BUCKETS" ]; then
@@ -303,13 +338,13 @@ jobs:
           else
             for B in $BUCKETS; do
               echo "Deleting bucket: $B (handling versioning and objects)"
-              
+
               # Check if bucket exists (might have been deleted by another process)
               if ! aws s3api head-bucket --bucket "$B" 2>/dev/null; then
                 echo "Bucket $B does not exist, skipping"
                 continue
               fi
-              
+
               # Delete all object versions (including delete markers)
               echo "- Deleting all object versions and delete markers..."
               aws s3api list-object-versions --bucket "$B" \
@@ -319,7 +354,7 @@ jobs:
                     aws s3api delete-object --bucket "$B" --key "$key" --version-id "$version" || true
                   fi
                 done
-              
+
               # Delete delete markers
               aws s3api list-object-versions --bucket "$B" \
                 --query 'DeleteMarkers[].[Key,VersionId]' --output text | \
@@ -328,12 +363,12 @@ jobs:
                     aws s3api delete-object --bucket "$B" --key "$key" --version-id "$version" || true
                   fi
                 done
-              
+
               # Now delete the empty bucket
               echo "- Deleting empty bucket..."
               aws s3api delete-bucket --bucket "$B" || echo "Warning: failed to delete bucket $B"
             done
-            echo "💤 S3 Terraform state buckets cleaned up after OIDC deletion"
+            echo "💤 S3 Terraform state buckets cleaned up"
           fi
 
       - name: Delete temporary IAM users if exist
@@ -382,6 +417,28 @@ jobs:
             echo "💤 Temporary IAM users cleaned up"
           fi
 
+      - name: OIDC Cleanup
+        working-directory: infra/1-oidc
+        run: |
+          terraform init -reconfigure
+
+          echo "🗑️ Destroying OIDC role (preserving shared OIDC provider)..."
+          # Always destroy role and attachments, preserve shared provider
+          terraform destroy -auto-approve -var-file=terraform.tfvars \
+            -target=aws_iam_role.github_deploy \
+            -target=aws_iam_role_policy_attachment.attach_vpc \
+            -target=aws_iam_role_policy_attachment.attach_rds \
+            -target=aws_iam_role_policy_attachment.attach_ecr \
+            -target=aws_iam_role_policy_attachment.attach_app_runner \
+            -target=aws_iam_role_policy_attachment.attach_iam \
+            -target=aws_iam_role_policy_attachment.attach_s3 \
+            -target=aws_iam_role_policy_attachment.attach_cloudwatch \
+            -target=aws_iam_role_policy_attachment.attach_sqs \
+            -target=aws_iam_role_policy_attachment.attach_amplify
+
+          echo "🔐 OIDC role destroyed (shared provider preserved)"
+
+
 
   hibernation_summary:
     name: "😴 Hibernation Summary"
@@ -401,7 +458,6 @@ jobs:
           echo "- ✅ RDS Aurora Database (storage costs eliminated)" >> $GITHUB_STEP_SUMMARY
           echo "- ✅ VPC and Networking (NAT Gateway costs eliminated)" >> $GITHUB_STEP_SUMMARY
           echo "- ✅ ECR Repository (storage costs eliminated)" >> $GITHUB_STEP_SUMMARY
-          echo "- ✅ OIDC IAM roles and policies" >> $GITHUB_STEP_SUMMARY
           echo "- ✅ Terraform state buckets and temporary users" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           
