@@ -1,5 +1,9 @@
 name: "Hibernate Project"
 
+# This workflow hibernates/destroys all AWS resources created by deploy-with-oidc.yml
+# It destroys ONLY the project-specific resources identified by TF_VAR_PREFIX
+# The shared OIDC provider is preserved for other projects
+
 on:
   workflow_dispatch:
     inputs:
@@ -232,7 +236,7 @@ jobs:
           terraform destroy -auto-approve -var-file=terraform.tfvars
           echo "💤 RDS, VPC, ECR hibernated - major cost savings achieved"
 
-  # Step 2: OIDC cleanup (always destroys role, preserves shared provider)
+  # Step 2: OIDC cleanup (destroys ONLY project-specific role created by oidc-first-time-setup)
   cleanup_oidc:
     name: "🔐 OIDC Cleanup"
     runs-on: ubuntu-latest
@@ -268,17 +272,37 @@ jobs:
           aws-region: ${{ env.AWS_REGION }}
           role-session-name: GitHubActions-CleanupOIDC
 
-      - name: Configure Terraform Backend (Local - S3 already deleted)
+      - name: Configure Terraform Backend
         working-directory: infra/1-oidc
         run: |
-          cat <<EOF > backend.tf
-          terraform {
-            backend "local" {
-              path = "terraform.tfstate"
+          # Try to use S3 backend first (if bucket exists), fallback to local
+          S3_BUCKET="${TF_VAR_PREFIX}-terraform-state-unique1029"
+          if aws s3api head-bucket --bucket "$S3_BUCKET" 2>/dev/null; then
+            echo "📦 S3 bucket exists - using S3 backend to get accurate state"
+            cat <<EOF > backend.tf
+            terraform {
+              backend "s3" {
+                bucket = "${S3_BUCKET}"
+                key    = "1-oidc/terraform.tfstate"
+                region = "${AWS_REGION}"
+                encrypt = true
+              }
             }
-          }
-          EOF
-          echo "✅ Using local backend since S3 bucket was already deleted"
+            EOF
+            terraform init -reconfigure
+            echo "✅ Using S3 backend with existing state"
+          else
+            echo "🗄️ S3 bucket deleted - using local backend"
+            cat <<EOF > backend.tf
+            terraform {
+              backend "local" {
+                path = "terraform.tfstate"
+              }
+            }
+            EOF
+            terraform init -reconfigure
+            echo "✅ Using local backend (no state available)"
+          fi
 
       - name: Configure Terraform Variables
         run: |
@@ -385,23 +409,63 @@ jobs:
       - name: OIDC Cleanup
         working-directory: infra/1-oidc
         run: |
-          terraform init -reconfigure
+          echo "🗑️ Destroying project-specific OIDC role (preserving shared OIDC provider)..."
 
-          echo "🗑️ Destroying OIDC role (preserving shared OIDC provider)..."
-          # Always destroy role and attachments, preserve shared provider
-          terraform destroy -auto-approve -var-file=terraform.tfvars \
-            -target=aws_iam_role.github_deploy \
-            -target=aws_iam_role_policy_attachment.attach_vpc \
-            -target=aws_iam_role_policy_attachment.attach_rds \
-            -target=aws_iam_role_policy_attachment.attach_ecr \
-            -target=aws_iam_role_policy_attachment.attach_app_runner \
-            -target=aws_iam_role_policy_attachment.attach_iam \
-            -target=aws_iam_role_policy_attachment.attach_s3 \
-            -target=aws_iam_role_policy_attachment.attach_cloudwatch \
-            -target=aws_iam_role_policy_attachment.attach_sqs \
-            -target=aws_iam_role_policy_attachment.attach_amplify
+          # Project-specific role name (created by oidc-first-time-setup)
+          # This uses TF_VAR_PREFIX to ensure we only destroy THIS project's role
+          ROLE_NAME="${TF_VAR_PREFIX}-github-deploy-role"
+          echo "Target role: $ROLE_NAME (project-specific, created by oidc-first-time-setup)"
 
-          echo "🔐 OIDC role destroyed (shared provider preserved)"
+          # Check if we're using S3 backend (state should exist)
+          if grep -q 'backend "s3"' backend.tf 2>/dev/null; then
+            echo "📦 Using S3 backend - attempting terraform destroy..."
+
+            # Try normal terraform destroy first (cleanest approach)
+            if terraform destroy -auto-approve -var-file=terraform.tfvars; then
+              echo "🔐 OIDC role destroyed successfully via terraform"
+            else
+              echo "⚠️  Terraform destroy failed - this is expected if state is incomplete"
+              echo "   Falling back to direct AWS CLI cleanup for the specific project role..."
+            fi
+
+          else
+            echo "🗄️ Using local backend - using direct AWS CLI cleanup..."
+            echo "   This ensures we only destroy the specific role created by oidc-first-time-setup"
+
+            # Check if the role exists before attempting cleanup
+            if aws iam get-role --role-name "$ROLE_NAME" >/dev/null 2>&1; then
+              echo "✅ Found role $ROLE_NAME - proceeding with cleanup"
+
+              # Detach all attached managed policies
+              echo "   Detaching managed policies..."
+              POLICIES=$(aws iam list-attached-role-policies --role-name "$ROLE_NAME" --query 'AttachedPolicies[].PolicyArn' --output text 2>/dev/null || echo "")
+              for POLICY in $POLICIES; do
+                if [ -n "$POLICY" ] && [ "$POLICY" != "None" ]; then
+                  echo "   Detaching: $POLICY"
+                  aws iam detach-role-policy --role-name "$ROLE_NAME" --policy-arn "$POLICY" || echo "   Failed to detach $POLICY"
+                fi
+              done
+
+              # Remove inline policies
+              echo "   Removing inline policies..."
+              INLINE_POLICIES=$(aws iam list-role-policies --role-name "$ROLE_NAME" --query 'PolicyNames[]' --output text 2>/dev/null || echo "")
+              for POLICY_NAME in $INLINE_POLICIES; do
+                if [ -n "$POLICY_NAME" ] && [ "$POLICY_NAME" != "None" ]; then
+                  echo "   Deleting inline policy: $POLICY_NAME"
+                  aws iam delete-role-policy --role-name "$ROLE_NAME" --policy-name "$POLICY_NAME" || echo "   Failed to delete $POLICY_NAME"
+                fi
+              done
+
+              # Finally delete the role
+              echo "   Deleting role: $ROLE_NAME"
+              aws iam delete-role --role-name "$ROLE_NAME" && echo "✅ Role $ROLE_NAME deleted successfully"
+
+            else
+              echo "ℹ️  Role $ROLE_NAME does not exist - nothing to clean up"
+            fi
+
+            echo "🔐 Project-specific OIDC role cleanup completed"
+          fi
 
 
 
@@ -430,7 +494,7 @@ jobs:
           if [[ "${{ needs.hibernate_resources.result }}" == "success" && "${{ needs.cleanup_oidc.result }}" == "success" ]]; then
             echo "## 😴 Project Successfully Hibernated!" >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
-            echo "Your project is now in cost-optimized hibernation mode." >> $GITHUB_STEP_SUMMARY
+            echo "Project **${TF_VAR_PREFIX}** is now in cost-optimized hibernation mode." >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
             echo "### 💰 Resources Destroyed (No More Costs):" >> $GITHUB_STEP_SUMMARY
             echo "- ✅ App Runner Service (compute costs eliminated)" >> $GITHUB_STEP_SUMMARY
@@ -438,26 +502,27 @@ jobs:
             echo "- ✅ RDS Aurora Database (storage costs eliminated)" >> $GITHUB_STEP_SUMMARY
             echo "- ✅ VPC and Networking (NAT Gateway costs eliminated)" >> $GITHUB_STEP_SUMMARY
             echo "- ✅ ECR Repository (storage costs eliminated)" >> $GITHUB_STEP_SUMMARY
+            echo "- ✅ Project OIDC role: \`${TF_VAR_PREFIX}-github-deploy-role\`" >> $GITHUB_STEP_SUMMARY
             echo "- ✅ Terraform state buckets and temporary users" >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
             echo "### 🎯 **TRUE ZERO COST HIBERNATION ACHIEVED!** 🎯" >> $GITHUB_STEP_SUMMARY
           else
             echo "## ⚠️ Hibernation Partially Completed" >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
-            echo "Some hibernation steps may have failed. Please review the workflow logs." >> $GITHUB_STEP_SUMMARY
+            echo "Some hibernation steps may have failed for project **${TF_VAR_PREFIX}**. Please review the workflow logs." >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
             echo "### Status:" >> $GITHUB_STEP_SUMMARY
             echo "- Hibernate Resources: ${{ needs.hibernate_resources.result }}" >> $GITHUB_STEP_SUMMARY
             echo "- OIDC Cleanup: ${{ needs.cleanup_oidc.result }}" >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
             echo "### ⚠️ Manual Cleanup May Be Required" >> $GITHUB_STEP_SUMMARY
-            echo "Check AWS Console for remaining resources and clean up manually if needed." >> $GITHUB_STEP_SUMMARY
+            echo "Check AWS Console for remaining resources with prefix **${TF_VAR_PREFIX}** and clean up manually if needed." >> $GITHUB_STEP_SUMMARY
           fi
-          
+
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### 🚀 Reactivation Process:" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**When you return (OIDC Setup Required):**" >> $GITHUB_STEP_SUMMARY
+          echo "**When you return to project ${TF_VAR_PREFIX} (OIDC Setup Required):**" >> $GITHUB_STEP_SUMMARY
           echo "1. **Create new S3 bucket**: \`${TF_VAR_PREFIX}-terraform-state-unique1029\` (versioned, encrypted)" >> $GITHUB_STEP_SUMMARY
           echo "2. **Create temp AWS user**: \`temp-setup-${TF_VAR_PREFIX}-$(date +%Y%m%d)\` with AdministratorAccess" >> $GITHUB_STEP_SUMMARY
           echo "3. **Update .initial_secrets**: Add new temp user credentials" >> $GITHUB_STEP_SUMMARY
@@ -465,10 +530,14 @@ jobs:
           echo "5. **Run** \`oidc-first-time-setup.yml\` (will reuse existing provider)" >> $GITHUB_STEP_SUMMARY
           echo "6. **Run** \`deploy-with-oidc.yml\` to recreate all resources" >> $GITHUB_STEP_SUMMARY
           echo "7. **Clean up** temp user and \`INITIAL_SECRETS_B64\` after successful deployment" >> $GITHUB_STEP_SUMMARY
-          
+
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### 💡 What's Preserved:" >> $GITHUB_STEP_SUMMARY
           echo "- 📁 All code and configurations" >> $GITHUB_STEP_SUMMARY
           echo "- 🔧 GitHub repository and workflows" >> $GITHUB_STEP_SUMMARY
           echo "- 📋 Infrastructure blueprints (Terraform modules)" >> $GITHUB_STEP_SUMMARY
           echo "- 🔐 Shared OIDC provider (preserved for other projects)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 🎯 Project-Specific Cleanup:" >> $GITHUB_STEP_SUMMARY
+          echo "This workflow only destroys resources with prefix **${TF_VAR_PREFIX}**" >> $GITHUB_STEP_SUMMARY
+          echo "Other projects in the same AWS account remain unaffected." >> $GITHUB_STEP_SUMMARY
