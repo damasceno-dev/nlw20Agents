@@ -92,23 +92,18 @@ jobs:
           aws-region: ${{ env.AWS_REGION }}
           role-session-name: GitHubActions-HibernateAppRunner
 
-      - name: Configure Terraform Backend (App Runner)
+      - name: Configure Terraform Backend (Local - hibernation mode)
         working-directory: infra/3-apprunner
         run: |
-          # Configure S3 backend for Terraform state dynamically
+          # Use local backend for hibernation (S3 bucket may not exist)
           cat <<EOF > backend.tf
           terraform {
-            backend "s3" {
-              bucket = "${TF_VAR_PREFIX}-terraform-state-unique1029"
-              key    = "3-apprunner/terraform.tfstate"
-              region = "${AWS_REGION}"
-              encrypt = true
+            backend "local" {
+              path = "terraform.tfstate"
             }
           }
           EOF
-        env:
-          TF_VAR_PREFIX: ${{ env.TF_VAR_PREFIX }}
-          AWS_REGION: ${{ env.AWS_REGION }}
+          echo "✅ Using local backend for hibernation cleanup"
 
       - name: Terraform Destroy App Runner
         working-directory: infra/3-apprunner
@@ -159,19 +154,18 @@ jobs:
           aws-region: ${{ env.AWS_REGION }}
           role-session-name: GitHubActions-HibernateAmplify
 
-      - name: Configure Terraform Backend (Amplify)
+      - name: Configure Terraform Backend (Local - hibernation mode)
         working-directory: infra/4-amplify
         run: |
+          # Use local backend for hibernation (S3 bucket may not exist)
           cat <<EOF > backend.tf
           terraform {
-            backend "s3" {
-              bucket = "${TF_VAR_PREFIX}-terraform-state-unique1029"
-              key    = "4-amplify/terraform.tfstate"
-              region = "${AWS_REGION}"
-              encrypt = true
+            backend "local" {
+              path = "terraform.tfstate"
             }
           }
           EOF
+          echo "✅ Using local backend for hibernation cleanup"
 
       - name: Terraform Destroy Amplify
         working-directory: infra/4-amplify
@@ -218,23 +212,18 @@ jobs:
           aws-region: ${{ env.AWS_REGION }}
           role-session-name: GitHubActions-HibernateResources
 
-      - name: Configure Terraform Backend (Resources)
+      - name: Configure Terraform Backend (Local - hibernation mode)
         working-directory: infra/2-resources
         run: |
-          # Configure S3 backend for Terraform state dynamically
+          # Use local backend for hibernation (S3 bucket may not exist)
           cat <<EOF > backend.tf
           terraform {
-            backend "s3" {
-              bucket = "${TF_VAR_PREFIX}-terraform-state-unique1029"
-              key    = "2-resources/terraform.tfstate"
-              region = "${AWS_REGION}"
-              encrypt = true
+            backend "local" {
+              path = "terraform.tfstate"
             }
           }
           EOF
-        env:
-          TF_VAR_PREFIX: ${{ env.TF_VAR_PREFIX }}
-          AWS_REGION: ${{ env.AWS_REGION }}
+          echo "✅ Using local backend for hibernation cleanup"
 
       - name: Terraform Destroy Resources
         working-directory: infra/2-resources
