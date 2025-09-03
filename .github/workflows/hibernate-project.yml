@@ -46,41 +46,14 @@ jobs:
           export $(grep -v '^#' .secrets | grep -v '^$' | xargs)
           echo "AWS_REGION=${AWS_REGION}" >> $GITHUB_ENV
           echo "TF_VAR_PREFIX=${TF_VAR_PREFIX}" >> $GITHUB_ENV
+          echo "AWS_ACCOUNT_ID=${AWS_ACCOUNT_ID}" >> $GITHUB_ENV
 
-      - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v3
-        with:
-          terraform_version: "1.6.0"
-
-      - name: Configure Terraform Backend (OIDC)
-        working-directory: infra/1-oidc
-        run: |
-          # Configure S3 backend for Terraform state dynamically
-          cat <<EOF > backend.tf
-          terraform {
-            backend "s3" {
-              bucket = "${TF_VAR_PREFIX}-terraform-state-unique1029"
-              key    = "oidc/terraform.tfstate"
-              region = "${AWS_REGION}"
-            }
-          }
-          EOF
-        env:
-          TF_VAR_PREFIX: ${{ env.TF_VAR_PREFIX }}
-          AWS_REGION: ${{ env.AWS_REGION }}
-
-      - name: Get OIDC Role ARN
+      - name: Construct OIDC Role ARN
         id: get_oidc_role
-        working-directory: infra/1-oidc
         run: |
-          terraform init -reconfigure
-          OIDC_ROLE_ARN=$(terraform output -raw github_deploy_role_arn 2>/dev/null || echo "")
-          if [ -n "$OIDC_ROLE_ARN" ]; then
-            echo "role_arn=${OIDC_ROLE_ARN}" >> $GITHUB_OUTPUT
-          else
-            echo "⚠️ No OIDC role found - may already be cleaned up"
-            echo "role_arn=" >> $GITHUB_OUTPUT
-          fi
+          OIDC_ROLE_ARN="arn:aws:iam::${{ env.AWS_ACCOUNT_ID }}:role/${{ env.TF_VAR_PREFIX }}-github-deploy-role"
+          echo "role_arn=${OIDC_ROLE_ARN}" >> $GITHUB_OUTPUT
+          echo "✅ Constructed OIDC Role ARN: ${OIDC_ROLE_ARN}"
 
   # Step 1: Destroy expensive resources first
   hibernate_app_runner:
@@ -446,29 +419,52 @@ jobs:
     needs: [validate_confirmation, hibernate_resources, cleanup_oidc]
     if: always() && needs.validate_confirmation.outputs.confirmed == 'true'
     steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Create .secrets file
+        run: |
+          echo "${{ secrets.SECRETS_B64 }}" | base64 -d > .secrets
+          chmod 600 .secrets
+
+      - name: Load Environment Variables
+        run: |
+          export $(grep -v '^#' .secrets | grep -v '^$' | xargs)
+          echo "TF_VAR_PREFIX=${TF_VAR_PREFIX}" >> $GITHUB_ENV
+
       - name: Generate Hibernation Summary
         run: |
-          echo "## 😴 Project Successfully Hibernated!" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "Your project is now in cost-optimized hibernation mode." >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### 💰 Resources Destroyed (No More Costs):" >> $GITHUB_STEP_SUMMARY
-          echo "- ✅ App Runner Service (compute costs eliminated)" >> $GITHUB_STEP_SUMMARY
-          echo "- ✅ Amplify Hosting (hosting costs eliminated)" >> $GITHUB_STEP_SUMMARY
-          echo "- ✅ RDS Aurora Database (storage costs eliminated)" >> $GITHUB_STEP_SUMMARY
-          echo "- ✅ VPC and Networking (NAT Gateway costs eliminated)" >> $GITHUB_STEP_SUMMARY
-          echo "- ✅ ECR Repository (storage costs eliminated)" >> $GITHUB_STEP_SUMMARY
-          echo "- ✅ Terraform state buckets and temporary users" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          
-          echo "### 🔐 OIDC Cleanup:" >> $GITHUB_STEP_SUMMARY
-          echo "- ✅ Project OIDC role deleted" >> $GITHUB_STEP_SUMMARY
-          echo "- ✅ Shared OIDC provider preserved (for other projects)" >> $GITHUB_STEP_SUMMARY
+          # Check if hibernation completed successfully
+          if [[ "${{ needs.hibernate_resources.result }}" == "success" && "${{ needs.cleanup_oidc.result }}" == "success" ]]; then
+            echo "## 😴 Project Successfully Hibernated!" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "Your project is now in cost-optimized hibernation mode." >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "### 💰 Resources Destroyed (No More Costs):" >> $GITHUB_STEP_SUMMARY
+            echo "- ✅ App Runner Service (compute costs eliminated)" >> $GITHUB_STEP_SUMMARY
+            echo "- ✅ Amplify Hosting (hosting costs eliminated)" >> $GITHUB_STEP_SUMMARY
+            echo "- ✅ RDS Aurora Database (storage costs eliminated)" >> $GITHUB_STEP_SUMMARY
+            echo "- ✅ VPC and Networking (NAT Gateway costs eliminated)" >> $GITHUB_STEP_SUMMARY
+            echo "- ✅ ECR Repository (storage costs eliminated)" >> $GITHUB_STEP_SUMMARY
+            echo "- ✅ Terraform state buckets and temporary users" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "### 🎯 **TRUE ZERO COST HIBERNATION ACHIEVED!** 🎯" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "## ⚠️ Hibernation Partially Completed" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "Some hibernation steps may have failed. Please review the workflow logs." >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "### Status:" >> $GITHUB_STEP_SUMMARY
+            echo "- Hibernate Resources: ${{ needs.hibernate_resources.result }}" >> $GITHUB_STEP_SUMMARY
+            echo "- OIDC Cleanup: ${{ needs.cleanup_oidc.result }}" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "### ⚠️ Manual Cleanup May Be Required" >> $GITHUB_STEP_SUMMARY
+            echo "Check AWS Console for remaining resources and clean up manually if needed." >> $GITHUB_STEP_SUMMARY
+          fi
           
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### 🚀 Reactivation Process:" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          
           echo "**When you return (OIDC Setup Required):**" >> $GITHUB_STEP_SUMMARY
           echo "1. **Create new S3 bucket**: \`${TF_VAR_PREFIX}-terraform-state-unique1029\` (versioned, encrypted)" >> $GITHUB_STEP_SUMMARY
           echo "2. **Create temp AWS user**: \`temp-setup-${TF_VAR_PREFIX}-$(date +%Y%m%d)\` with AdministratorAccess" >> $GITHUB_STEP_SUMMARY
@@ -483,34 +479,4 @@ jobs:
           echo "- 📁 All code and configurations" >> $GITHUB_STEP_SUMMARY
           echo "- 🔧 GitHub repository and workflows" >> $GITHUB_STEP_SUMMARY
           echo "- 📋 Infrastructure blueprints (Terraform modules)" >> $GITHUB_STEP_SUMMARY
-
           echo "- 🔐 Shared OIDC provider (preserved for other projects)" >> $GITHUB_STEP_SUMMARY
-          
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### ⚠️ Manual S3 Cleanup (If Automated Failed):" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "If S3 bucket cleanup failed, manually delete with AWS CLI:" >> $GITHUB_STEP_SUMMARY
-          echo "\`\`\`bash" >> $GITHUB_STEP_SUMMARY
-          echo "# List and delete all object versions:" >> $GITHUB_STEP_SUMMARY
-          echo "aws s3api list-object-versions --bucket \"YOUR_PREFIX-terraform-state-unique1029\" \\" >> $GITHUB_STEP_SUMMARY
-          echo "  --query 'Versions[].[Key,VersionId]' --output text | \\" >> $GITHUB_STEP_SUMMARY
-          echo "  while read key version; do" >> $GITHUB_STEP_SUMMARY
-          echo "    aws s3api delete-object --bucket \"YOUR_PREFIX-terraform-state-unique1029\" \\" >> $GITHUB_STEP_SUMMARY
-          echo "      --key \"\$key\" --version-id \"\$version\"" >> $GITHUB_STEP_SUMMARY
-          echo "  done" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "# Delete delete markers:" >> $GITHUB_STEP_SUMMARY
-          echo "aws s3api list-object-versions --bucket \"YOUR_PREFIX-terraform-state-unique1029\" \\" >> $GITHUB_STEP_SUMMARY
-          echo "  --query 'DeleteMarkers[].[Key,VersionId]' --output text | \\" >> $GITHUB_STEP_SUMMARY
-          echo "  while read key version; do" >> $GITHUB_STEP_SUMMARY
-          echo "    aws s3api delete-object --bucket \"YOUR_PREFIX-terraform-state-unique1029\" \\" >> $GITHUB_STEP_SUMMARY
-          echo "      --key \"\$key\" --version-id \"\$version\"" >> $GITHUB_STEP_SUMMARY
-          echo "  done" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "# Finally delete the empty bucket:" >> $GITHUB_STEP_SUMMARY
-          echo "aws s3api delete-bucket --bucket \"YOUR_PREFIX-terraform-state-unique1029\"" >> $GITHUB_STEP_SUMMARY
-          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**💸 Estimated monthly savings: ~$100-500+ depending on your usage**" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### 🎯 **TRUE ZERO COST HIBERNATION ACHIEVED!** 🎯" >> $GITHUB_STEP_SUMMARY
