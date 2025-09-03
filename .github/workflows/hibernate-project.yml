@@ -279,19 +279,17 @@ jobs:
           aws-region: ${{ env.AWS_REGION }}
           role-session-name: GitHubActions-CleanupOIDC
 
-      - name: Configure Terraform Backend (S3 - normal cleanup)
+      - name: Configure Terraform Backend (Local - S3 already deleted)
         working-directory: infra/1-oidc
         run: |
           cat <<EOF > backend.tf
           terraform {
-            backend "s3" {
-              bucket = "${TF_VAR_PREFIX}-terraform-state-unique1029"
-              key    = "oidc/terraform.tfstate"
-              region = "${AWS_REGION}"
+            backend "local" {
+              path = "terraform.tfstate"
             }
           }
           EOF
-          echo "✅ Using S3 backend for proper OIDC cleanup"
+          echo "✅ Using local backend since S3 bucket was already deleted"
 
       - name: Configure Terraform Variables
         run: |
