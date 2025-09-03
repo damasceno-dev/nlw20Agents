@@ -80,9 +80,7 @@ jobs:
           echo "AWS_REGION=${AWS_REGION}" >> $GITHUB_ENV
           echo "TF_VAR_PREFIX=${TF_VAR_PREFIX}" >> $GITHUB_ENV
 
-          cat <<EOF > infra/3-apprunner/terraform.tfvars
-          prefix = "${TF_VAR_PREFIX}"
-          EOF
+          printf 'prefix = "%s"\n' "$TF_VAR_PREFIX" > infra/3-apprunner/terraform.tfvars
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
@@ -100,13 +98,7 @@ jobs:
         working-directory: infra/3-apprunner
         run: |
           # Use local backend for hibernation (S3 bucket may not exist)
-          cat <<EOF > backend.tf
-          terraform {
-            backend "local" {
-              path = "terraform.tfstate"
-            }
-          }
-          EOF
+          printf 'terraform {\n  backend "local" {\n    path = "terraform.tfstate"\n  }\n}\n' > backend.tf
           echo "✅ Using local backend for hibernation cleanup"
 
       - name: Terraform Destroy App Runner
@@ -139,12 +131,7 @@ jobs:
           echo "GITHUB_REPO=${GITHUB_REPO}" >> $GITHUB_ENV
           echo "GH_PAT=${GH_PAT}" >> $GITHUB_ENV
 
-          cat <<EOF > infra/4-amplify/terraform.tfvars
-          prefix = "${TF_VAR_PREFIX}"
-          github_repository = "https://github.com/${GITHUB_ORG}/${GITHUB_REPO}"
-          branch_name = "main"
-          github_access_token = "${GH_PAT}"
-          EOF
+          printf 'prefix = "%s"\ngithub_repository = "https://github.com/%s/%s"\nbranch_name = "main"\ngithub_access_token = "%s"\n' "$TF_VAR_PREFIX" "$GITHUB_ORG" "$GITHUB_REPO" "$GH_PAT" > infra/4-amplify/terraform.tfvars
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
@@ -162,13 +149,7 @@ jobs:
         working-directory: infra/4-amplify
         run: |
           # Use local backend for hibernation (S3 bucket may not exist)
-          cat <<EOF > backend.tf
-          terraform {
-            backend "local" {
-              path = "terraform.tfstate"
-            }
-          }
-          EOF
+          printf 'terraform {\n  backend "local" {\n    path = "terraform.tfstate"\n  }\n}\n' > backend.tf
           echo "✅ Using local backend for hibernation cleanup"
 
       - name: Terraform Destroy Amplify
@@ -199,10 +180,7 @@ jobs:
           echo "TF_VAR_PREFIX=${TF_VAR_PREFIX}" >> $GITHUB_ENV
           echo "TF_VAR_DB_PASSWORD=${TF_VAR_DB_PASSWORD}" >> $GITHUB_ENV
 
-          cat <<EOF > infra/2-resources/terraform.tfvars
-          prefix = "${TF_VAR_PREFIX}"
-          db_password = "${TF_VAR_DB_PASSWORD}"
-          EOF
+          printf 'prefix = "%s"\ndb_password = "%s"\n' "$TF_VAR_PREFIX" "$TF_VAR_DB_PASSWORD" > infra/2-resources/terraform.tfvars
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
@@ -220,13 +198,7 @@ jobs:
         working-directory: infra/2-resources
         run: |
           # Use local backend for hibernation (S3 bucket may not exist)
-          cat <<EOF > backend.tf
-          terraform {
-            backend "local" {
-              path = "terraform.tfstate"
-            }
-          }
-          EOF
+          printf 'terraform {\n  backend "local" {\n    path = "terraform.tfstate"\n  }\n}\n' > backend.tf
           echo "✅ Using local backend for hibernation cleanup"
 
       - name: Terraform Destroy Resources
@@ -279,40 +251,19 @@ jobs:
           S3_BUCKET="${TF_VAR_PREFIX}-terraform-state-unique1029"
           if aws s3api head-bucket --bucket "$S3_BUCKET" 2>/dev/null; then
             echo "📦 S3 bucket exists - using S3 backend to get accurate state"
-            cat <<EOF > backend.tf
-            terraform {
-              backend "s3" {
-                bucket = "${S3_BUCKET}"
-                key    = "1-oidc/terraform.tfstate"
-                region = "${AWS_REGION}"
-                encrypt = true
-              }
-            }
-            EOF
+            printf 'terraform {\n  backend "s3" {\n    bucket = "%s"\n    key    = "1-oidc/terraform.tfstate"\n    region = "%s"\n    encrypt = true\n  }\n}\n' "$S3_BUCKET" "$AWS_REGION" > backend.tf
             terraform init -reconfigure
             echo "✅ Using S3 backend with existing state"
           else
             echo "🗄️ S3 bucket deleted - using local backend"
-            cat <<EOF > backend.tf
-            terraform {
-              backend "local" {
-                path = "terraform.tfstate"
-              }
-            }
-            EOF
+            printf 'terraform {\n  backend "local" {\n    path = "terraform.tfstate"\n  }\n}\n' > backend.tf
             terraform init -reconfigure
             echo "✅ Using local backend (no state available)"
           fi
 
       - name: Configure Terraform Variables
         run: |
-          cat <<EOF > infra/1-oidc/terraform.tfvars
-          prefix = "${TF_VAR_PREFIX}"
-          github_org = "${GITHUB_ORG}"
-          github_repo = "${GITHUB_REPO}"
-          aws_region = "${AWS_REGION}"
-          aws_account_id = "${AWS_ACCOUNT_ID}"
-          EOF
+          printf 'prefix = "%s"\ngithub_org = "%s"\ngithub_repo = "%s"\naws_region = "%s"\naws_account_id = "%s"\n' "$TF_VAR_PREFIX" "$GITHUB_ORG" "$GITHUB_REPO" "$AWS_REGION" "$AWS_ACCOUNT_ID" > infra/1-oidc/terraform.tfvars
 
       - name: Delete S3 Terraform State Bucket(s)
         env:
