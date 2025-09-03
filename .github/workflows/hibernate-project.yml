@@ -76,6 +76,10 @@ jobs:
           echo "AWS_REGION=${AWS_REGION}" >> $GITHUB_ENV
           echo "TF_VAR_PREFIX=${TF_VAR_PREFIX}" >> $GITHUB_ENV
 
+          cat <<EOF > infra/3-apprunner/terraform.tfvars
+          prefix = "${TF_VAR_PREFIX}"
+          EOF
+
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
         with:
@@ -110,7 +114,7 @@ jobs:
         working-directory: infra/3-apprunner
         run: |
           terraform init -reconfigure
-          terraform destroy -auto-approve
+          terraform destroy -auto-approve -var-file=terraform.tfvars
           echo "💤 App Runner hibernated - no more compute costs"
 
   hibernate_amplify:
@@ -198,6 +202,7 @@ jobs:
           echo "TF_VAR_DB_PASSWORD=${TF_VAR_DB_PASSWORD}" >> $GITHUB_ENV
 
           cat <<EOF > infra/2-resources/terraform.tfvars
+          prefix = "${TF_VAR_PREFIX}"
           db_password = "${TF_VAR_DB_PASSWORD}"
           EOF
 
