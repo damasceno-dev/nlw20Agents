@@ -357,7 +357,32 @@ resource "aws_iam_policy" "iam_policy" {
           "iam:ListRoleTags",
           "iam:TagPolicy",
           "iam:UntagPolicy",
-          "iam:ListPolicyTags"
+          "iam:ListPolicyTags",
+
+          # User management (for hibernation cleanup)
+          "iam:CreateUser",
+          "iam:DeleteUser",
+          "iam:GetUser",
+          "iam:ListUsers",
+          "iam:UpdateUser",
+          "iam:CreateAccessKey",
+          "iam:DeleteAccessKey",
+          "iam:ListAccessKeys",
+          "iam:UpdateAccessKey",
+          "iam:AttachUserPolicy",
+          "iam:DetachUserPolicy",
+          "iam:PutUserPolicy",
+          "iam:DeleteUserPolicy",
+          "iam:GetUserPolicy",
+          "iam:ListUserPolicies",
+          "iam:ListAttachedUserPolicies",
+          "iam:AddUserToGroup",
+          "iam:RemoveUserFromGroup",
+          "iam:ListGroupsForUser",
+          "iam:CreateLoginProfile",
+          "iam:DeleteLoginProfile",
+          "iam:GetLoginProfile",
+          "iam:UpdateLoginProfile"
         ]
         Resource = "*"
       }
@@ -386,10 +411,12 @@ resource "aws_iam_policy" "s3_policy" {
         Effect = "Allow"
         Action = [
           "s3:ListBucket",
+          "s3:ListBucketVersions",
           "s3:GetBucketLocation",
           "s3:GetBucketVersioning",
           "s3:GetBucketAcl",
-          "s3:GetBucketPolicy"
+          "s3:GetBucketPolicy",
+          "s3:DeleteBucket"
         ]
         Resource = "arn:aws:s3:::${var.prefix}-terraform-state-unique1029"
       },
@@ -427,8 +454,7 @@ resource "aws_iam_policy" "s3_policy" {
           "s3:DeleteBucketWebsite",
           "s3:GetBucketPublicAccessBlock",
           "s3:PutBucketPublicAccessBlock",
-          "s3:GetBucketEncryption",
-          "s3:PutBucketEncryption",
+          "s3:PutEncryptionConfiguration",
           "s3:GetBucketTagging",
           "s3:PutBucketTagging"
         ]
