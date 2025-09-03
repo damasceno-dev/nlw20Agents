@@ -317,10 +317,13 @@ jobs:
         run: |
           set -euo pipefail
           echo "Looking for IAM users starting with: temp-setup-${PREFIX}-"
-          USERS=$(aws iam list-users --query "Users[?starts_with(UserName, \`temp-setup-${PREFIX}-\`)].UserName" --output text || true)
-          if [ -z "$USERS" ]; then
-            echo "No matching temp setup users found."
-          else
+
+          # Try to list users, but handle AccessDenied gracefully
+          if USERS=$(aws iam list-users --query "Users[?starts_with(UserName, \`temp-setup-${PREFIX}-\`)].UserName" --output text 2>/dev/null); then
+            echo "✅ Successfully listed IAM users"
+            if [ -z "$USERS" ] || [ "$USERS" = "None" ]; then
+              echo "No matching temp setup users found."
+            else
             for U in $USERS; do
               echo "Cleaning up IAM user: $U"
               # Delete access keys
@@ -355,6 +358,16 @@ jobs:
               aws iam delete-user --user-name "$U" || true
             done
             echo "💤 Temporary IAM users cleaned up"
+          else
+            echo "⚠️  Cannot list IAM users due to permission restrictions"
+            echo "   This may happen if the role was created before iam:ListUsers was added to the policy"
+            echo "   Manual cleanup may be required:"
+            echo "   1. For temp users:"
+            echo "      aws iam list-users --query 'Users[?starts_with(UserName, \`temp-setup-${PREFIX}-\`)].UserName'"
+            echo "      aws iam delete-user --user-name <username>"
+            echo "   2. For orphaned OIDC policies:"
+            echo "      aws iam list-policies --query 'Policies[?PolicyName && contains(PolicyName, \`-${PREFIX}-OIDC-\`)].Arn'"
+            echo "      aws iam delete-policy --policy-arn <policy-arn>"
           fi
 
       - name: OIDC Cleanup
@@ -370,10 +383,11 @@ jobs:
           # Check if we're using S3 backend (state should exist)
           if grep -q 'backend "s3"' backend.tf 2>/dev/null; then
             echo "📦 Using S3 backend - attempting terraform destroy..."
+            echo "   This will automatically clean up the role AND all associated policies"
 
             # Try normal terraform destroy first (cleanest approach)
             if terraform destroy -auto-approve -var-file=terraform.tfvars; then
-              echo "🔐 OIDC role destroyed successfully via terraform"
+              echo "🔐 OIDC role and all policies destroyed successfully via terraform"
             else
               echo "⚠️  Terraform destroy failed - this is expected if state is incomplete"
               echo "   Falling back to direct AWS CLI cleanup for the specific project role..."
@@ -381,7 +395,7 @@ jobs:
 
           else
             echo "🗄️ Using local backend - using direct AWS CLI cleanup..."
-            echo "   This ensures we only destroy the specific role created by oidc-first-time-setup"
+            echo "   This ensures we only destroy the specific role AND its policies created by oidc-first-time-setup"
 
             # Check if the role exists before attempting cleanup
             if aws iam get-role --role-name "$ROLE_NAME" >/dev/null 2>&1; then
@@ -394,6 +408,13 @@ jobs:
                 if [ -n "$POLICY" ] && [ "$POLICY" != "None" ]; then
                   echo "   Detaching: $POLICY"
                   aws iam detach-role-policy --role-name "$ROLE_NAME" --policy-arn "$POLICY" || echo "   Failed to detach $POLICY"
+
+                  # Also delete the policy if it's one of our OIDC policies (contains the prefix)
+                  POLICY_NAME=$(echo "$POLICY" | awk -F'/' '{print $NF}')
+                  if [[ "$POLICY_NAME" == *"${PREFIX}-OIDC"* ]]; then
+                    echo "   Deleting OIDC policy: $POLICY_NAME"
+                    aws iam delete-policy --policy-arn "$POLICY" || echo "   Failed to delete policy $POLICY_NAME"
+                  fi
                 fi
               done
 
@@ -453,7 +474,8 @@ jobs:
             echo "- ✅ RDS Aurora Database (storage costs eliminated)" >> $GITHUB_STEP_SUMMARY
             echo "- ✅ VPC and Networking (NAT Gateway costs eliminated)" >> $GITHUB_STEP_SUMMARY
             echo "- ✅ ECR Repository (storage costs eliminated)" >> $GITHUB_STEP_SUMMARY
-            echo "- ✅ Project OIDC role: \`${TF_VAR_PREFIX}-github-deploy-role\`" >> $GITHUB_STEP_SUMMARY
+            echo "- ✅ Project OIDC role: \`${TF_VAR_PREFIX}-github-deploy-role\`"
+            echo "- ✅ Associated IAM policies: \`${TF_VAR_PREFIX}-OIDC-*\`" >> $GITHUB_STEP_SUMMARY
             echo "- ✅ Terraform state buckets and temporary users" >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
             echo "### 🎯 **TRUE ZERO COST HIBERNATION ACHIEVED!** 🎯" >> $GITHUB_STEP_SUMMARY

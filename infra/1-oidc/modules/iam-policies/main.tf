@@ -326,9 +326,9 @@ resource "aws_iam_policy" "iam_policy" {
           "iam:ListRolePolicies",
           "iam:ListAttachedRolePolicies",
 
-          # Policy management
+          # Policy management (including deletion for cleanup)
           "iam:CreatePolicy",
-          "iam:DeletePolicy",
+          "iam:DeletePolicy",  # Required for hibernation cleanup
           "iam:GetPolicy",
           "iam:GetPolicyVersion",
           "iam:ListPolicies",
