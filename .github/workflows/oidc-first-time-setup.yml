@@ -94,23 +94,124 @@ jobs:
           aws-secret-access-key: ${{ env.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
 
-      - name: Verify S3 Terraform State Bucket
+      - name: Create or Verify S3 Terraform State Bucket
         run: |
           BUCKET_NAME="${TF_VAR_PREFIX}-terraform-state-unique1029"
-          echo "🔍 Checking if S3 bucket exists: ${BUCKET_NAME}"
+          echo "🪣 Setting up S3 bucket for Terraform state: ${BUCKET_NAME}"
+          echo "📍 Region: ${AWS_REGION}"
           
+          # Check if bucket exists
           if aws s3api head-bucket --bucket "${BUCKET_NAME}" 2>/dev/null; then
-            echo "✅ S3 bucket '${BUCKET_NAME}' exists and is accessible"
+            echo "✅ S3 bucket '${BUCKET_NAME}' already exists"
+          
+            # Verify versioning is enabled
+            VERSIONING=$(aws s3api get-bucket-versioning --bucket "${BUCKET_NAME}" --query 'Status' --output text 2>/dev/null || echo "")
+            if [ "$VERSIONING" != "Enabled" ]; then
+              echo "⚠️  Enabling versioning on existing bucket..."
+              aws s3api put-bucket-versioning \
+                --bucket "${BUCKET_NAME}" \
+                --versioning-configuration Status=Enabled
+              echo "✅ Versioning enabled"
+            else
+              echo "✅ Versioning already enabled"
+            fi
+          
+            # Verify encryption
+            if ! aws s3api get-bucket-encryption --bucket "${BUCKET_NAME}" 2>/dev/null; then
+              echo "⚠️  Enabling encryption on existing bucket..."
+              aws s3api put-bucket-encryption \
+                --bucket "${BUCKET_NAME}" \
+                --server-side-encryption-configuration '{
+                  "Rules": [{
+                    "ApplyServerSideEncryptionByDefault": {
+                      "SSEAlgorithm": "AES256"
+                    }
+                  }]
+                }'
+              echo "✅ Encryption enabled"
+            else
+              echo "✅ Encryption already enabled"
+            fi
+          
           else
-            echo "❌ S3 bucket '${BUCKET_NAME}' does not exist or is not accessible"
-            echo "📖 Please create the bucket manually in AWS Console:"
-            echo "   - Name: ${BUCKET_NAME}"
-            echo "   - Region: ${AWS_REGION}"
-            echo "   - Versioning: ENABLED"
-            echo "   - Encryption: ENABLED (AES-256)"
-            echo "   - Block all public access: YES"
-            exit 1
+            echo "📦 Creating new S3 bucket..."
+          
+            # Create bucket with proper region handling
+            if [ "${AWS_REGION}" = "us-east-1" ]; then
+              # us-east-1 doesn't need LocationConstraint
+              aws s3api create-bucket \
+                --bucket "${BUCKET_NAME}" \
+                --region "${AWS_REGION}"
+            else
+              # Other regions need LocationConstraint
+              aws s3api create-bucket \
+                --bucket "${BUCKET_NAME}" \
+                --region "${AWS_REGION}" \
+                --create-bucket-configuration LocationConstraint="${AWS_REGION}"
+            fi
+          
+            echo "✅ Bucket created"
+          
+            # Enable versioning (required for Terraform state)
+            echo "🔄 Enabling versioning..."
+            aws s3api put-bucket-versioning \
+              --bucket "${BUCKET_NAME}" \
+              --versioning-configuration Status=Enabled
+            echo "✅ Versioning enabled"
+          
+            # Enable server-side encryption
+            echo "🔐 Enabling encryption..."
+            aws s3api put-bucket-encryption \
+              --bucket "${BUCKET_NAME}" \
+              --server-side-encryption-configuration '{
+                "Rules": [{
+                  "ApplyServerSideEncryptionByDefault": {
+                    "SSEAlgorithm": "AES256"
+                  }
+                }]
+              }'
+            echo "✅ Encryption enabled"
+          
+            # Block all public access
+            echo "🔒 Blocking public access..."
+            aws s3api put-public-access-block \
+              --bucket "${BUCKET_NAME}" \
+              --public-access-block-configuration \
+                "BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true"
+            echo "✅ Public access blocked"
+          
+            # Add lifecycle rule to delete old versions after 90 days (optional, cost optimization)
+            echo "♻️ Setting up lifecycle rules for cost optimization..."
+            aws s3api put-bucket-lifecycle-configuration \
+              --bucket "${BUCKET_NAME}" \
+              --lifecycle-configuration '{
+                "Rules": [{
+                  "Id": "DeleteOldVersions",
+                  "Status": "Enabled",
+                  "NoncurrentVersionExpiration": {
+                    "NoncurrentDays": 90
+                  }
+                }]
+              }'
+            echo "✅ Lifecycle rules configured"
+          
+            echo "🎉 S3 bucket '${BUCKET_NAME}' created and fully configured!"
           fi
+          
+          # Add tags for better resource management
+          echo "🏷️ Adding resource tags..."
+          aws s3api put-bucket-tagging \
+            --bucket "${BUCKET_NAME}" \
+            --tagging '{
+              "TagSet": [
+                {"Key": "Project", "Value": "'"${TF_VAR_PREFIX}"'"},
+                {"Key": "ManagedBy", "Value": "Terraform"},
+                {"Key": "Purpose", "Value": "TerraformState"},
+                {"Key": "CreatedBy", "Value": "GitHubActions"}
+              ]
+            }'
+          echo "✅ Tags applied"
+        
         env:
           TF_VAR_PREFIX: ${{ env.TF_VAR_PREFIX }}
           AWS_REGION: ${{ env.AWS_REGION }}
@@ -125,9 +226,12 @@ jobs:
               bucket = "${TF_VAR_PREFIX}-terraform-state-unique1029"
               key    = "oidc/terraform.tfstate"
               region = "${AWS_REGION}"
+              encrypt = true
             }
           }
           EOF
+          
+          echo "✅ Terraform backend configuration created"
         env:
           TF_VAR_PREFIX: ${{ env.TF_VAR_PREFIX }}
           AWS_REGION: ${{ env.AWS_REGION }}
@@ -141,11 +245,11 @@ jobs:
             echo "oidc_provider_arn=" >> $GITHUB_OUTPUT
           else
             echo "🔍 Checking if GitHub OIDC provider already exists in this AWS account..."
-            
+          
             GITHUB_PROVIDER_ARN=$(aws iam list-open-id-connect-providers \
               --query 'OpenIDConnectProviderList[?contains(Arn, `token.actions.githubusercontent.com`)].Arn' \
               --output text || echo "")
-            
+          
             if [ -n "${GITHUB_PROVIDER_ARN}" ] && [ "${GITHUB_PROVIDER_ARN}" != "None" ]; then
               echo "oidc_exists=true" >> $GITHUB_OUTPUT
               echo "oidc_provider_arn=${GITHUB_PROVIDER_ARN}" >> $GITHUB_OUTPUT
@@ -251,6 +355,15 @@ jobs:
           echo "## 🎉 OIDC Setup Complete!" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### ✅ What was created:" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "#### 🪣 **S3 Terraform State Bucket**" >> $GITHUB_STEP_SUMMARY
+          echo "- Automatically created/verified with proper configuration" >> $GITHUB_STEP_SUMMARY
+          echo "- Versioning: Enabled" >> $GITHUB_STEP_SUMMARY
+          echo "- Encryption: AES-256" >> $GITHUB_STEP_SUMMARY
+          echo "- Public Access: Blocked" >> $GITHUB_STEP_SUMMARY
+          echo "- Lifecycle: Old versions deleted after 90 days" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "#### 🔐 **OIDC Infrastructure**" >> $GITHUB_STEP_SUMMARY
           if [ "${{ github.event.inputs.force_oidc_recreation }}" == "true" ]; then
             echo "- **FORCE RECREATION ENABLED** - Cleaned up and recreated all resources" >> $GITHUB_STEP_SUMMARY
             echo "- GitHub OIDC Provider: **RECREATED** (force recreation)" >> $GITHUB_STEP_SUMMARY
@@ -264,7 +377,7 @@ jobs:
           fi
           echo "- Trust relationship between GitHub Actions and AWS" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### 🔑 GitHub Role ARN:" >> $GITHUB_STEP_SUMMARY
+          echo "### 📌 GitHub Role ARN:" >> $GITHUB_STEP_SUMMARY
           echo "\`${{ needs.setup_oidc.outputs.oidc_role_arn }}\`" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### 🚀 Next Steps:" >> $GITHUB_STEP_SUMMARY
@@ -287,3 +400,9 @@ jobs:
           echo "2. Delete temporary GitHub secret: Settings → Secrets → \`INITIAL_SECRETS_B64\` → Delete" >> $GITHUB_STEP_SUMMARY
           echo "3. Clean up local files: \`rm .initial_secrets .initial_secrets.b64\`" >> $GITHUB_STEP_SUMMARY
           echo "4. Keep only \`SECRETS_B64\` secret for future deployments" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 📝 Important Notes:" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- The S3 bucket for Terraform state is **essential** for proper resource management" >> $GITHUB_STEP_SUMMARY
+          echo "- The bucket must exist for the hibernate workflow to properly clean up resources" >> $GITHUB_STEP_SUMMARY
+          echo "- Never delete the S3 bucket manually - use the hibernate workflow" >> $GITHUB_STEP_SUMMARY
