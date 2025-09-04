@@ -69,7 +69,7 @@ nlw20Agents/
 │   ├── 2-resources/                    # VPC, Aurora, ECR
 │   ├── 3-apprunner/                    # App Runner service (.NET API hosting)
 │   └── 4-amplify/                      # AWS Amplify (Next.js SSR hosting)
-├── server/                             # .NET 9 Backend API
+├── server/                            # .NET 9 Backend API
 ├── web/                               # Next.js Frontend
 ├── .initial_secrets.example           # Temporary AWS credentials
 ├── .secrets.example                   # Project configuration
@@ -130,13 +130,46 @@ docker run --name postgres-local -e POSTGRES_PASSWORD=postgres -p 5432:5432 -d p
 
 > **Note:** The project uses PostgreSQL with the pgvector extension for vector similarity search. See `server/docker-compose.yaml` for the complete local database setup.
 
+### 🧭 Vector Search (pgvector)
+
+This project stores OpenAI embeddings for each audio chunk and performs similarity search directly in Postgres using the pgvector extension.
+
+- Storage: an `Embeddings` column of type `vector` on the `AudioChunks` table
+- Query: order by pgvector's distance operator `<=>` (cosine distance) to get nearest neighbors
+- Threshold: after fetching the nearest items, we apply an additional cosine-distance threshold in C# to keep only highly relevant results
+
+See the actual implementation in: `server/server.Infrastructure/Repositories/AudioRepository.cs`.
+
+Minimal query flow from the repository:
+
+```csharp
+using Pgvector;
+...
+var questionVector = new Vector(questionEmbeddings);
+var similarChunks = await dbContext.AudioChunks
+    .FromSqlRaw(@"
+        SELECT * FROM \"AudioChunks\"
+        WHERE \"RoomId\" = {0} AND \"Active\" = true
+        ORDER BY \"Embeddings\" <=> {1}
+        LIMIT {2}", roomId, questionVector, limit)
+    .ToListAsync();
+
+// Optional post-filter (cosine distance):
+// <=> returns cosine distance; we keep entries with distance <= (1 - similarityThreshold)
+```
+
+Notes:
+- The `<=>` operator returns cosine distance (0 = identical, larger = less similar). We convert a similarity threshold (e.g., 0.7) into a max distance of `1 - 0.7 = 0.3` for filtering.
+- Local dev uses the `pgvector/pgvector:pg17` image which has the extension preinstalled.
+- For Aurora PostgreSQL, ensure the pgvector extension is supported/enabled for your engine version.
+
 ### 🏗️ Monorepo Structure
 
 This project started as separate repositories for the frontend, backend, and infrastructure components. We consolidated them into a single monorepo to improve development workflow, deployment coordination, and code sharing.
 
 **Migration Process:**
 - Originally maintained as 3 separate repositories
-- Consolidated using safe monorepo setup procedures (see `safe_monorepo_setup.md`)
+- Consolidated using safe monorepo setup procedures (see [safe_monorepo_setup.md](safe_monorepo_setup.md))
 - Preserved complete Git history from all original repositories
 - Maintains clear separation of concerns with dedicated directories
 
