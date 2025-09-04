@@ -21,6 +21,7 @@ appsettings.Development.json
 .vscode/
 *.swp
 *.swo
+.claude
 
 # OS
 .DS_Store
@@ -44,3 +45,4 @@ ehthumbs.db
 .env
 .env.local
 .env.*.local
+/.claude/
