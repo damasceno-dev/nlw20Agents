@@ -136,11 +136,14 @@ git push origin main
 7. Wait for completion (~5-10 minutes)
 
 This workflow will automatically:
-- 🪣 **Create S3 bucket** for Terraform state (with versioning, encryption, and lifecycle rules)
+- 🪣 **Create S3 bucket** for Terraform state if not exists (with versioning, encryption, and lifecycle rules)
 - ✅ Create or detect existing GitHub OIDC Provider in your AWS account
 - ✅ Create project-specific OIDC role with least-privilege policies
 - ✅ Set up secure GitHub → AWS authentication
-- ✅ Configure everything with proper tagging and cost optimization
+- ✅ **Create tf-cleanup-role** for cleaning up the s3 state bucket (if not exists)
+  - solving chicken-and-egg problem with IAM role: OIDC role needs terraform state bucket to get properly deleted, and S3 needs an OIDC role to get deleted as well. 
+  - This cleanup role is shared accross projects and it serves only to delete the S3 bucket that has the terraform state for this project.
+  - This role is created automatically if it doesn't exist.
 
 **What Gets Created:**
 - **S3 Bucket**: `{prefix}-terraform-state-unique1029` (automatic!)
@@ -151,6 +154,8 @@ This workflow will automatically:
 - **OIDC Provider**: Shared across AWS account (reused if exists)
 - **IAM Role**: `{prefix}-github-deploy-role` (project-specific)
 - **IAM Policies**: Least-privilege access for deployments
+- **IAM Role**: `tf-clean-up-role` reused if exists
+- **IAM Policies**: Least-privilege access for cleanup S3 terraform state bucket
 
 ### Step 5: Test Full Deployment (Before Cleanup!)
 
@@ -195,7 +200,6 @@ The setup has been streamlined from multiple manual steps to just one:
 | 3 | Add to GitHub | Manual (or via gh CLI) | 2 min |
 | 4 | Run OIDC workflow | Auto (creates S3 + OIDC) | 5-10 min |
 | 5 | Test deployment | Auto | 15-25 min |
-| 6 | Cleanup temp user | Manual | 2 min |
 
 **Total: ~30-45 minutes from zero to deployed application!**
 
