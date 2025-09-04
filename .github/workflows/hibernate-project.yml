@@ -448,10 +448,10 @@ jobs:
           echo "AWS_REGION=${AWS_REGION}" >> $GITHUB_ENV
           echo "TF_VAR_PREFIX=${TF_VAR_PREFIX}" >> $GITHUB_ENV
 
-      - name: Configure AWS Credentials (OIDC)
+      - name: Configure AWS Credentials (Cleanup Role)
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: ${{ needs.validate_confirmation.outputs.oidc_role_arn }}
+          role-to-assume: arn:aws:iam::${{ env.AWS_ACCOUNT_ID }}:role/tf-cleanup-role
           aws-region: ${{ env.AWS_REGION }}
           role-session-name: GitHubActions-FinalCleanup
 

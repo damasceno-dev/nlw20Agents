@@ -215,7 +215,101 @@ jobs:
         env:
           TF_VAR_PREFIX: ${{ env.TF_VAR_PREFIX }}
           AWS_REGION: ${{ env.AWS_REGION }}
-
+          
+      - name: Ensure Cleanup Role (org-wide main)
+        env:
+          CLEANUP_ROLE_NAME: tf-cleanup-role
+          AWS_ACCOUNT_ID: ${{ env.AWS_ACCOUNT_ID }}
+          # org-wide + main branch only:
+          GITHUB_SUB_PATTERN: repo:${{ github.repository_owner }}/*:ref:refs/heads/main
+        run: |
+          set -euo pipefail
+          
+          TRUST="$(cat <<JSON
+          {
+            "Version": "2012-10-17",
+            "Statement": [
+              {
+                "Effect": "Allow",
+                "Principal": {
+                  "Federated": "arn:aws:iam::${AWS_ACCOUNT_ID}:oidc-provider/token.actions.githubusercontent.com"
+                },
+                "Action": "sts:AssumeRoleWithWebIdentity",
+                "Condition": {
+                  "StringEquals": {
+                    "token.actions.githubusercontent.com:aud": "sts.amazonaws.com"
+                  },
+                  "StringLike": {
+                    "token.actions.githubusercontent.com:sub": "${GITHUB_SUB_PATTERN}"
+                  }
+                }
+              }
+            ]
+          }
+          JSON
+          )"
+          
+          POLICY="$(cat <<'JSON'
+          {
+            "Version": "2012-10-17",
+            "Statement": [
+              {
+                "Sid": "BucketLevel",
+                "Effect": "Allow",
+                "Action": [
+                  "s3:ListBucket",
+                  "s3:ListBucketVersions",
+                  "s3:GetBucketVersioning",
+                  "s3:GetBucketTagging",
+                  "s3:DeleteBucket"
+                ],
+                "Resource": [
+                  "arn:aws:s3:::*-terraform-state-*"
+                ]
+              },
+              {
+                "Sid": "ObjectLevel",
+                "Effect": "Allow",
+                "Action": [
+                  "s3:GetObject",
+                  "s3:DeleteObject",
+                  "s3:DeleteObjectVersion",
+                  "s3:ListBucket",
+                  "s3:ListBucketVersions"
+                ],
+                "Resource": [
+                  "arn:aws:s3:::*-terraform-state-*/*"
+                ]
+              }
+            ]
+          }
+          JSON
+          )"
+          
+          if aws iam get-role --role-name "$CLEANUP_ROLE_NAME" >/dev/null 2>&1; then
+            echo "✅ Role exists; refreshing trust/policy"
+            aws iam update-assume-role-policy \
+              --role-name "$CLEANUP_ROLE_NAME" \
+              --policy-document "$TRUST"
+          
+            aws iam put-role-policy \
+              --role-name "$CLEANUP_ROLE_NAME" \
+              --policy-name tf-cleanup-s3 \
+              --policy-document "$POLICY"
+          else
+            echo "🧰 Creating role $CLEANUP_ROLE_NAME"
+            aws iam create-role \
+              --role-name "$CLEANUP_ROLE_NAME" \
+              --assume-role-policy-document "$TRUST"
+          
+            aws iam put-role-policy \
+              --role-name "$CLEANUP_ROLE_NAME" \
+              --policy-name tf-cleanup-s3 \
+              --policy-document "$POLICY"
+          
+            echo "✅ Created $CLEANUP_ROLE_NAME"
+          fi
+      
       - name: Configure Terraform Backend
         working-directory: infra/1-oidc
         run: |
