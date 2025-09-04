@@ -16,30 +16,18 @@ Follow these steps to set up your full-stack project with secure OIDC authentica
 
 ### Step 1: AWS Account Prerequisites
 
-**1.1 Create S3 Bucket for Terraform State**
+**Create Temporary Setup User**
 ```bash
-# Login to AWS Console as root user (with MFA)
-# Navigate to S3 → Create bucket
-# Configuration:
-#   - Name: {your-prefix}-terraform-state-unique1029
-#   - Region: us-east-1
-#   - Versioning: ENABLED
-#   - Encryption: ENABLED (AES-256)
-#   - Block all public access: YES
-```
-
-> ⚠️ **Critical**: This bucket must be created MANUALLY before running any Terraform. Replace `{your-prefix}` with your project prefix (e.g., "agents").
-
-**1.2 Create Temporary Setup User**
-```bash
-# Still in AWS Console as root:
+# Login to AWS Console with admin access
 # IAM → Users → Create user
 # User name: temp-setup-{prefix}-{YYYYMMDD}
-# Example: temp-setup-agents-20250826
+# Example: temp-setup-agents-20250904
 # Attach policy: AdministratorAccess (AWS managed policy)
-# After the user is created, in Security credentials tab→ Create access key → CLI
-# ⚠️ Save these credentials in .initial_secrets file
+# Security credentials tab → Create access key → CLI
+# ⚠️ Save these credentials - you'll need them in Step 2
 ```
+
+> 📝 **Note**: The OIDC workflow will create the S3 bucket for Terraform state automatically - no manual S3 setup needed!
 
 ### Step 2: Local Configuration
 
@@ -56,17 +44,17 @@ cp .initial_secrets.example .initial_secrets
 cp .secrets.example .secrets
 ```
 
-**2.3 Edit `.initial_secrets` (temporary - will be deleted)**
+**Edit `.initial_secrets` (temporary - will be deleted)**
 ```bash
 nano .initial_secrets
 ```
 ```env
-# Add the temporary AWS credentials from Step 1.2:
+# Add the temporary AWS credentials from Step 1:
 TEMP_AWS_ACCESS_KEY_ID=AKIA...
 TEMP_AWS_SECRET_ACCESS_KEY=...
 ```
 
-**2.4 Edit `.secrets` (permanent project configuration)**
+**Edit `.secrets` (permanent project configuration)**
 ```bash
 nano .secrets
 ```
@@ -89,8 +77,7 @@ DB_NAME=agents
 DB_USERNAME=postgres
 
 # Application Configuration
-OPENAI_API_KEY=your-open-api-key
-
+OPENAI_API_KEY=your-openai-api-key
 ```
 
 **📝 Note on GitHub Personal Access Token (GH_PAT):**
@@ -104,7 +91,7 @@ To create a GitHub Personal Access Token:
 5. Give it full write permission on the repo
 6. Copy the generated token and use it as the `GH_PAT` value in your `.secrets` file
 
-**2.5 Prepare GitHub Secrets**
+**2.3 Prepare GitHub Secrets**
 ```bash
 # Validate and encode secrets
 chmod +x prepare_secrets.sh
@@ -137,20 +124,33 @@ git push origin main
    - Name: `SECRETS_B64`  
    - Value: Paste entire content of `.secrets.b64`
 
-### Step 4: OIDC Setup (One-Time per AWS account; per-repo role auto-created)
+### Step 4: OIDC Setup (One-Time Setup with Automatic S3 Creation)
 
 **4.1 Run OIDC First-Time Setup**
 1. Go to your GitHub repository
 2. Navigate to **Actions** tab
 3. Find **"OIDC First Time Setup"** workflow
-4. Click **"Run workflow"** → **"Run workflow"**
-5. Wait for completion (~5-10 minutes)
+4. Click **"Run workflow"**
+5. Type `SETUP` in the confirmation field
+6. Click **"Run workflow"** (green button)
+7. Wait for completion (~5-10 minutes)
 
-This workflow will:
+This workflow will automatically:
+- 🪣 **Create S3 bucket** for Terraform state (with versioning, encryption, and lifecycle rules)
 - ✅ Create or detect existing GitHub OIDC Provider in your AWS account
 - ✅ Create project-specific OIDC role with least-privilege policies
 - ✅ Set up secure GitHub → AWS authentication
-- ✅ Clean up temporary credentials automatically
+- ✅ Configure everything with proper tagging and cost optimization
+
+**What Gets Created:**
+- **S3 Bucket**: `{prefix}-terraform-state-unique1029` (automatic!)
+  - Versioning: Enabled
+  - Encryption: AES-256
+  - Public Access: Blocked
+  - Lifecycle: Old versions deleted after 90 days
+- **OIDC Provider**: Shared across AWS account (reused if exists)
+- **IAM Role**: `{prefix}-github-deploy-role` (project-specific)
+- **IAM Policies**: Least-privilege access for deployments
 
 ### Step 5: Test Full Deployment (Before Cleanup!)
 
@@ -184,69 +184,81 @@ This workflow will:
 
 4. **Keep only SECRETS_B64** in GitHub for all future deployments
 
-## 🏗️ Project Isolation Strategy
+## 🎯 Simplified Setup Summary
+
+The setup has been streamlined from multiple manual steps to just one:
+
+| Step | Action | Manual/Auto | Time |
+|------|--------|-------------|------|
+| 1 | Create temp IAM user | Manual (or via bootstrap.sh) | 2 min |
+| 2 | Configure secrets | Script assisted | 3 min |
+| 3 | Add to GitHub | Manual (or via gh CLI) | 2 min |
+| 4 | Run OIDC workflow | Auto (creates S3 + OIDC) | 5-10 min |
+| 5 | Test deployment | Auto | 15-25 min |
+| 6 | Cleanup temp user | Manual | 2 min |
+
+**Total: ~30-45 minutes from zero to deployed application!**
+
+## 🗂️ Project Isolation Strategy
 
 This setup is designed for **per-project isolation** with shared OIDC infrastructure:
 
-### 🔐 Per-Project Resources (Created Every Time):
-- ✅ **Separate S3 bucket per project** (`{prefix}-terraform-state-unique1029`)
-- ✅ **Separate GitHub Deploy Role** (`{prefix}-github-deploy-role`)
-- ✅ **Separate temporary AWS credentials** (deleted after setup)
-- ✅ **Independent Terraform state** per project
+### 📁 Per-Project Resources (Created Automatically):
+- ✅ **S3 bucket** (`{prefix}-terraform-state-unique1029`) - Created by OIDC workflow
+- ✅ **GitHub Deploy Role** (`{prefix}-github-deploy-role`)
+- ✅ **Terraform state** (stored in project's S3 bucket)
+- ✅ **All application resources** (RDS, App Runner, Amplify, etc.)
 
 ### 🌐 Shared AWS Account Resources (One-Time):
 - ✅ **GitHub OIDC Provider** (created once, automatically detected and reused)
 
 ### 🔍 Smart OIDC Detection:
-- **First Project**: Creates OIDC provider + project role
-- **Subsequent Projects**: Detects existing OIDC provider, skips creation, creates only project role
+- **First Project**: Creates OIDC provider + S3 bucket + project role
+- **Subsequent Projects**: Detects existing OIDC provider, creates new S3 bucket + project role
 - **Clear Logging**: Shows exactly what's being created vs reused
-
-**_OIDC Provider_**: GitHub OIDC trust relationship with AWS, one per aws account. 
-Can be reused across projects.
-
-**_OIDC Role_**: IAM role that allows GitHub to assume it. One per project (uses prefixed project name).
 
 ### 🚀 Using This as a Template:
 
 **For Each New Project:**
 1. **Clone/Fork this repository**
-2. **Create project-specific AWS resources:**
-   - Create S3 bucket: `{new-prefix}-terraform-state-unique1029`
-   - Create temporary AWS user: `temp-setup-{new-prefix}-{YYYYMMDD}`
-3. **Update configuration files:**
-   - Update `.initial_secrets` with new temporary AWS user credentials
-   - Update `.secrets` file with new prefix (e.g., `TF_VAR_PREFIX=myapp`)
-4. **Prepare and add GitHub secrets:**
-   - Run `./prepare_secrets.sh` to encode files
-   - Add `INITIAL_SECRETS_B64` and `SECRETS_B64` to GitHub repository secrets
-5. **Run OIDC setup workflow** - it will detect existing OIDC and create only project resources
+2. **Create temporary AWS user**: `temp-setup-{new-prefix}-{YYYYMMDD}`
+3. **Update configuration**:
+   - Set new `TF_VAR_PREFIX` in `.secrets`
+   - Update GitHub repo details
+4. **Run setup**:
+   - `./prepare_secrets.sh`
+   - Add secrets to GitHub
+   - Run OIDC workflow (S3 bucket created automatically!)
+5. **Deploy and cleanup**
 
 ## 💰 Costs and Budget
 
 For comprehensive cost analysis, service-by-service breakdowns, optimization strategies, and hibernation savings calculator, see **[COSTS.md](COSTS.md)**.
 
-**Quick Summary:** $109-340/month active deployment, **$0/month** during hibernation.
+**Quick Summary:** 
+- **Active deployment**: $109-340/month
+- **During hibernation**: **$0/month** (true zero cost!)
 
-## 🏗️ Deployment Workflows
+## 🗄️ Deployment Workflows
 
 ### 📋 Available Workflows
 
-| Workflow | Purpose | Trigger | Duration |
-|----------|---------|---------|----------|
-| `oidc-first-time-setup.yml` | One-time OIDC setup | Manual | ~5-10 min |
-| `deploy-with-oidc.yml` | Full infrastructure deployment | Manual | ~15-25 min |
-| `hibernate-project.yml` | Zero-cost hibernation | Manual | ~10-15 min |
+| Workflow | Purpose | Prerequisites | Duration |
+|----------|---------|---------------|----------|
+| `oidc-first-time-setup.yml` | Setup OIDC + Create S3 | Temp IAM user | ~5-10 min |
+| `deploy-with-oidc.yml` | Full deployment | OIDC setup complete | ~15-25 min |
+| `hibernate-project.yml` | Zero-cost hibernation | Resources deployed | ~10-15 min |
 
 ### 🔐 OIDC First-Time Setup
-**Purpose:** Establish secure GitHub OIDC authentication for AWS deployments
+**Purpose:** Establish secure GitHub OIDC authentication and create infrastructure foundation
 
-**What it creates:**
-- GitHub OIDC provider (shared across projects)
-- Project-specific IAM role with minimal permissions
-- S3 bucket for Terraform state storage
+**What it creates automatically:**
+- 🪣 S3 bucket for Terraform state (with all security settings)
+- 🔐 GitHub OIDC provider (if not exists)
+- 👤 Project-specific IAM role
+- 📜 Least-privilege IAM policies
 
-**When to run:** Once per AWS account, before any deployments
+**When to run:** Once per project, before any deployments
 
 ### 🚀 Main Deployment (Deploy with OIDC)
 **Purpose:** Deploy complete application infrastructure to AWS
@@ -258,105 +270,32 @@ For comprehensive cost analysis, service-by-service breakdowns, optimization str
 - **Network:** VPC with public/private subnets
 - **Registry:** ECR for Docker images
 
-**Cost Analysis:** See **[COSTS.md](COSTS.md)** for detailed cost breakdown by service
-
-**Workflow Options:**
-- ✅ Deploy Infrastructure
-- ✅ Deploy Server
-- ✅ Deploy App Runner
-- ✅ Deploy Amplify
-- ✅ Configure App Runner CORS with Amplify URL
+**Workflow Stages:**
+1. Infrastructure (VPC, RDS, ECR)
+2. Server build and ECR push
+3. App Runner deployment
+4. Amplify deployment
+5. CORS configuration
 
 ### 🛌 Project Hibernation
-**Purpose:** Achieve zero-cost hibernation while preserving shared resources
+**Purpose:** Achieve zero-cost hibernation while preserving code and configurations
 
-**What it destroys:** See **[COSTS.md](COSTS.md)** for cost impact details
+**What it destroys (in order):**
+1. App Runner service (compute costs)
+2. Amplify app (hosting costs)
+3. RDS/VPC/ECR (storage/network costs)
+4. Project OIDC role
+5. S3 state bucket (final cleanup)
 
 **What it preserves:**
 - 🔐 Shared OIDC provider (for other projects)
-- 📁 All code and configurations
+- 📝 All code and configurations
 - 🔧 GitHub repository and workflows
-- 📋 Infrastructure blueprints (Terraform modules)
 
 **Reactivation process:**
-1. Recreate S3 terraform state bucket
-2. Run `oidc-first-time-setup.yml` (reuses existing provider)
-3. Run `deploy-with-oidc.yml` to recreate all resources
-
-**Savings Calculator:** See **[COSTS.md](COSTS.md)** for hibernation savings analysis
-
-### 💡 Workflow Strategy
-
-**Development → Production → Hibernation:**
-```mermaid
-graph LR
-    A[oidc-first-time-setup.yml] --> B[deploy-with-oidc.yml]
-    B --> C[hibernate-project.yml]
-    C --> B
-```
-
-**Key Benefits:**
-- **Zero AWS Credentials:** GitHub OIDC handles authentication
-- **Complete Infrastructure as Code:** Terraform manages everything
-- **True Zero Cost:** Full hibernation preserves shared resources (see **[COSTS.md](COSTS.md)**)
-- **Quick Reactivation:** Automated redeployment from preserved blueprints
-
-> 🎯 **All workflows are manual-only** - No automatic deployments occur. You have full control over when and what gets deployed.
-
-## 🗑️ Infrastructure Teardown
-
-### Hibernation Workflow
-
-For detailed hibernation instructions, see the **"🛌 Project Hibernation"** section above.
-
-**Quick Hibernation Steps:**
-1. **GitHub Actions** → **"Hibernate Project"**
-2. Type `HIBERNATE` to confirm
-3. Wait for completion (~10-15 minutes)
-
-**Result:** Zero-cost hibernation while preserving shared OIDC provider for other projects.
-
-### Manual S3 Cleanup (If Needed)
-
-If automated S3 state bucket cleanup fails during hibernation, manually delete it:
-
-```bash
-# Replace YOUR_PREFIX with your actual prefix from .secrets file
-BUCKET_NAME="YOUR_PREFIX-terraform-state-unique1029"
-
-# Delete all object versions and delete markers
-aws s3api list-object-versions --bucket "$BUCKET_NAME" \
-  --query 'Versions[].[Key,VersionId]' --output text | \
-  while read key version; do
-    aws s3api delete-object --bucket "$BUCKET_NAME" \
-      --key "$key" --version-id "$version"
-  done
-
-aws s3api list-object-versions --bucket "$BUCKET_NAME" \
-  --query 'DeleteMarkers[].[Key,VersionId]' --output text | \
-  while read key version; do
-    aws s3api delete-object --bucket "$BUCKET_NAME" \
-      --key "$key" --version-id "$version"
-  done
-
-# Delete the empty bucket
-aws s3api delete-bucket --bucket "$BUCKET_NAME"
-```
-
-## 📊 Infrastructure Overview
-
-### AWS Services Deployed
-
-| Service                  | Configuration                  | Purpose                        |
-|--------------------------|--------------------------------|--------------------------------|
-| **GitHub OIDC Provider** | Trust relationship with GitHub | Secure authentication          |
-| **Aurora Serverless v2** | 0.5-1 ACU, PostgreSQL          | Application database           |
-| **App Runner**           | 1 vCPU, 2 GB RAM               | .NET API hosting               |
-| **AWS Amplify**          | Next.js hosting + CI/CD        | Frontend hosting               |
-| **ECR**                  | Private repository             | Docker image storage           |
-| **VPC**                  | 2 public + 2 private subnets   | Network isolation              |
-
-For detailed cost analysis and optimization strategies, see **[COSTS.md](COSTS.md)**.
+1. Create new temp IAM user
+2. Run `oidc-first-time-setup.yml` (recreates S3 + role)
+3. Run `deploy-with-oidc.yml` (redeploys everything)
 
 ## 🛠️ Troubleshooting
 
@@ -369,25 +308,28 @@ For detailed cost analysis and optimization strategies, see **[COSTS.md](COSTS.m
 # Ensure AWS account ID is correct in .secrets
 ```
 
-**2. Deployment Fails - "Role cannot be assumed"**
+**2. S3 Bucket Creation Fails**
+```bash
+# The OIDC workflow now creates S3 automatically
+# If it fails, check:
+# - AWS region is valid
+# - Bucket name is unique (includes unique1029 suffix)
+# - Temp credentials have S3 permissions
+```
+
+**3. Deployment Fails - "Role cannot be assumed"**
 ```bash
 # OIDC role doesn't exist or trust relationship is wrong
-# Re-run "OIDC First Time Setup" workflow
-# Check GitHub repository settings match .secrets configuration
+# Re-run "OIDC First Time Setup" workflow with force recreation:
+# - Check "Force recreation" option
+# - Type SETUP and run
 ```
 
-**3. Database Connection Issues**
+**4. Database Connection Issues**
 ```bash
-# Verify Aurora is in "available" state in AWS Console
-# Check security group allows App Runner connections
-# Confirm database password matches what's in .secrets
-```
-
-**4. App Runner Service Won't Start**
-```bash
-# Check CloudWatch logs: AWS Console → App Runner → Service → Logs
-# Verify ECR image was pushed successfully
-# Confirm appsettings.Production.json is valid JSON
+# Verify Aurora is in "available" state
+# Check App Runner → Configuration → Environment variables
+# Ensure DB password in .secrets matches Aurora
 ```
 
 **5. ECR Push Permission Denied**
@@ -474,10 +416,9 @@ aws logs tail /aws/apprunner/agents-app-runner-service --follow
 
 ### Regular Tasks
 
-- **Quarterly**: Review and rotate any remaining AWS credentials
-- **Monthly**: Check AWS costs and optimize resources
-- **Weekly**: Review CloudWatch logs for errors
-- **As needed**: Update Terraform providers and GitHub Actions
+- **Monthly**: Review AWS costs in Cost Explorer
+- **Quarterly**: Rotate GitHub PAT
+- **As needed**: Update dependencies and packages
 
 ### Backup Strategy
 
@@ -491,22 +432,13 @@ aws logs tail /aws/apprunner/agents-app-runner-service --follow
 **Update Dependencies**
 ```bash
 # .NET packages
-cd server && dotnet list package --outdated
+cd server && dotnet outdated
 
 # Node.js packages  
-cd web && npm audit
+cd web && npm audit fix
 
 # Terraform providers
 cd infra && terraform init -upgrade
-```
-
-**Infrastructure Updates**
-```bash
-# Apply infrastructure changes:
-# 1. Make changes to Terraform files
-# 2. Push to main branch  
-# 3. Deploy-on-change workflow triggers automatically
-# OR manually trigger "Deploy with OIDC" workflow
 ```
 
 ## 📚 Additional Resources
@@ -518,43 +450,40 @@ cd infra && terraform init -upgrade
 - [Aurora Serverless v2](https://docs.aws.amazon.com/AmazonRDS/latest/AuroraUserGuide/aurora-serverless-v2.html)
 - [Terraform AWS Provider](https://registry.terraform.io/providers/hashicorp/aws/latest/docs)
 
-### Project Structure Details
+### Project Structure
 
 ```
-infra/
-├── 1-oidc/              # GitHub OIDC trust setup
-│   ├── main.tf          # OIDC provider and IAM role
-│   ├── variables.tf     # Input variables
-│   ├── outputs.tf       # GitHub role ARN
-│   └── modules/
-│       └── iam-policies/  # Least-privilege policies
-├── 2-resources/         # Core infrastructure
-│   ├── main.tf          # VPC, Aurora, ECR
-│   └── modules/
-│       ├── aurora/      # Database configuration
-│       ├── vpc/         # Network setup
-│       └── ecr/         # Container registry
-├── 3-apprunner/         # .NET API hosting
-│   ├── main.tf          # App Runner service
-│   └── modules/
-│       └── app_runner/  # App Runner module
-└── 4-amplify/           # Next.js SSR hosting
-    ├── main.tf          # Amplify app configuration
-    └── modules/
-        └── amplify/     # Amplify hosting module
+nlw20Agents/
+├── .github/workflows/        # GitHub Actions workflows
+│   ├── oidc-first-time-setup.yml
+│   ├── deploy-with-oidc.yml
+│   └── hibernate-project.yml
+├── infra/                   # Terraform infrastructure
+│   ├── 1-oidc/             # OIDC setup
+│   ├── 2-resources/        # Core AWS resources
+│   ├── 3-apprunner/        # API deployment
+│   └── 4-amplify/          # Frontend deployment
+├── server/                  # .NET API
+│   ├── Dockerfile
+│   └── server.sln
+├── web/                     # Next.js frontend
+│   ├── package.json
+│   └── next.config.ts
+└── prepare_secrets.sh  # Secret encoding
 ```
 
 ## 🆘 Support
 
 For issues or questions:
 
-1. **Check workflow logs** in GitHub Actions
-2. **Review AWS CloudWatch** logs for runtime issues  
-3. **Verify Terraform state** consistency
-4. **Ensure all secrets** are properly configured
-5. **Confirm S3 state bucket** exists and is accessible
+1. **Check GitHub Actions logs** for detailed error messages
+2. **Review AWS CloudWatch** for runtime logs
+3. **Verify all secrets** are properly configured
+4. **Ensure S3 state bucket** was created successfully
+5. **Check IAM permissions** for the OIDC role
 
-**Need help?** Open an issue in this repository with:
-- Steps to reproduce the problem
-- Relevant log output (redact sensitive information)
-- Your environment details (AWS region, project prefix, etc.)
+**Need help?** Open an issue with:
+- Workflow logs (redact sensitive data)
+- Error messages
+- Your configuration (prefix, region, etc.)
+- Steps to reproduce the issue
