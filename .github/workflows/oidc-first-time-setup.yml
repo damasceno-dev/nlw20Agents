@@ -186,10 +186,12 @@ jobs:
               --bucket "${BUCKET_NAME}" \
               --lifecycle-configuration '{
                 "Rules": [{
-                  "ID": "DeleteOldVersions",
-                  "Status": "Enabled",
-                  "NoncurrentVersionExpiration": {
-                    "NoncurrentDays": 90
+                "Id": "DeleteOldVersions",
+                "Status": "Enabled",
+                "Prefix": "",
+                "NoncurrentVersionExpiration": {
+                  "NoncurrentDays": 90
+                }
                   }
                 }]
               }'
