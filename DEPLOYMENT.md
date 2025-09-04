@@ -138,11 +138,11 @@ git push origin main
 This workflow will automatically:
 - 🪣 **Create S3 bucket** for Terraform state if not exists (with versioning, encryption, and lifecycle rules)
 - ✅ Create or detect existing GitHub OIDC Provider in your AWS account
-- ✅ Create project-specific OIDC role with least-privilege policies
+- ✅ Create a project-specific OIDC role with least-privilege policies
 - ✅ Set up secure GitHub → AWS authentication
 - ✅ **Create tf-cleanup-role** for cleaning up the s3 state bucket (if not exists)
-  - solving chicken-and-egg problem with IAM role: OIDC role needs terraform state bucket to get properly deleted, and S3 needs an OIDC role to get deleted as well. 
-  - This cleanup role is shared accross projects and it serves only to delete the S3 bucket that has the terraform state for this project.
+  - solving a chicken-and-egg problem with IAM role: OIDC role needs terraform state bucket to get properly deleted, and S3 needs an OIDC role to get deleted as well. 
+  - This cleanup role is shared across projects, and it serves only to delete the S3 bucket that has the terraform state for this project.
   - This role is created automatically if it doesn't exist.
 
 **What Gets Created:**
@@ -163,7 +163,7 @@ This workflow will automatically:
 
 1. **Run the "Deploy with OIDC" workflow** to verify OIDC works end-to-end
 2. **Confirm all resources deploy successfully** (infrastructure, server, app runner)
-3. **Only proceed to cleanup after successful deployment**
+3. **Only proceed to clean up after successful deployment**
 
 > **Why?** If OIDC has permission issues or other problems, you will need the temporary credentials to fix them. Don't delete your safety net until you know everything works!
 
@@ -193,15 +193,15 @@ This workflow will automatically:
 
 The setup has been streamlined from multiple manual steps to just one:
 
-| Step | Action | Manual/Auto | Time |
-|------|--------|-------------|------|
-| 1 | Create temp IAM user | Manual (or via bootstrap.sh) | 2 min |
-| 2 | Configure secrets | Script assisted | 3 min |
-| 3 | Add to GitHub | Manual (or via gh CLI) | 2 min |
-| 4 | Run OIDC workflow | Auto (creates S3 + OIDC) | 5-10 min |
-| 5 | Test deployment | Auto | 15-25 min |
+| Step | Action               | Manual/Auto                  | Time      |
+|------|----------------------|------------------------------|-----------|
+| 1    | Create temp IAM user | Manual (or via bootstrap.sh) | 2 min     |
+| 2    | Configure secrets    | Script assisted              | 3 min     |
+| 3    | Add to GitHub        | Manual (or via gh CLI)       | 2 min     |
+| 4    | Run OIDC workflow    | Auto (creates S3 + OIDC)     | 5-10 min  |
+| 5    | Test deployment      | Auto                         | 15-25 min |
 
-**Total: ~30-45 minutes from zero to deployed application!**
+**Total: ~30–45 minutes from zero to deployed application!**
 
 ## 🗂️ Project Isolation Strategy
 
@@ -247,11 +247,11 @@ For comprehensive cost analysis, service-by-service breakdowns, optimization str
 
 ### 📋 Available Workflows
 
-| Workflow | Purpose | Prerequisites | Duration |
-|----------|---------|---------------|----------|
-| `oidc-first-time-setup.yml` | Setup OIDC + Create S3 | Temp IAM user | ~5-10 min |
-| `deploy-with-oidc.yml` | Full deployment | OIDC setup complete | ~15-25 min |
-| `hibernate-project.yml` | Zero-cost hibernation | Resources deployed | ~10-15 min |
+| Workflow                    | Purpose                | Prerequisites       | Duration   |
+|-----------------------------|------------------------|---------------------|------------|
+| `oidc-first-time-setup.yml` | Setup OIDC + Create S3 | Temp IAM user       | ~5-10 min  |
+| `deploy-with-oidc.yml`      | Full deployment        | OIDC setup complete | ~15-25 min |
+| `hibernate-project.yml`     | Zero-cost hibernation  | Resources deployed  | ~10-15 min |
 
 ### 🔐 OIDC First-Time Setup
 **Purpose:** Establish secure GitHub OIDC authentication and create infrastructure foundation
@@ -270,7 +270,7 @@ For comprehensive cost analysis, service-by-service breakdowns, optimization str
 **What it deploys:**
 - **Backend:** .NET API on AWS App Runner
 - **Frontend:** Next.js app on AWS Amplify
-- **Database:** Aurora PostgreSQL with pgvector
+- **Database:** Aurora PostgresSQL with pgvector
 - **Network:** VPC with public/private subnets
 - **Registry:** ECR for Docker images
 
@@ -298,7 +298,7 @@ For comprehensive cost analysis, service-by-service breakdowns, optimization str
 
 **Reactivation process:**
 1. Create new temp IAM user
-2. Run `oidc-first-time-setup.yml` (recreates S3 + role)
+2. Run `oidc-first-time-setup.yml` (recreates S3 for terraform state management, OIDC roles and tf-cleanup-role)
 3. Run `deploy-with-oidc.yml` (redeploys everything)
 
 ## 🛠️ Troubleshooting
@@ -386,7 +386,7 @@ The web/scripts/prepare-amplify-deployment.js handles the complexity to deploy N
 - Ensures static files and public directory are in the right place
 - Moves server.js to the correct location
 
-5. Different Build Command
+**Different Build Command**
 
 - Must use npm run build:amplify (not regular npm run build)
 - This runs both next build AND the preparation script

@@ -427,7 +427,8 @@ jobs:
           terraform destroy -auto-approve -var-file=terraform.tfvars
           echo "✅ OIDC role and all associated policies destroyed successfully via terraform"
 
-  # Step 3: Final cleanup - delete S3 bucket as the last step
+  # Final cleanup - delete S3 bucket as the last step
+  # uses tf-cleanup-role created in 1-oidc-first-time-setup.yml or reused from other projects
   cleanup_s3_bucket:
     name: "🗄️ Final Cleanup - S3 Bucket"
     runs-on: ubuntu-latest
@@ -447,6 +448,7 @@ jobs:
           export $(grep -v '^#' .secrets | grep -v '^$' | xargs)
           echo "AWS_REGION=${AWS_REGION}" >> $GITHUB_ENV
           echo "TF_VAR_PREFIX=${TF_VAR_PREFIX}" >> $GITHUB_ENV
+          echo "AWS_ACCOUNT_ID=${AWS_ACCOUNT_ID}" >> $GITHUB_ENV
 
       - name: Configure AWS Credentials (Cleanup Role)
         uses: aws-actions/configure-aws-credentials@v4
@@ -560,11 +562,13 @@ jobs:
           export $(grep -v '^#' .secrets | grep -v '^$' | xargs)
           echo "AWS_REGION=${AWS_REGION}" >> $GITHUB_ENV
           echo "TF_VAR_PREFIX=${TF_VAR_PREFIX}" >> $GITHUB_ENV
+          echo "AWS_ACCOUNT_ID=${AWS_ACCOUNT_ID}" >> $GITHUB_ENV
+
 
       - name: Configure AWS Credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: ${{ needs.validate_confirmation.outputs.oidc_role_arn }}
+          role-to-assume: arn:aws:iam::${{ env.AWS_ACCOUNT_ID }}:role/tf-cleanup-role
           aws-region: ${{ env.AWS_REGION }}
           role-session-name: GitHubActions-ValidateCleanup
 
@@ -688,13 +692,12 @@ jobs:
           echo "### 🚀 Reactivation Process:" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**When you return to project ${TF_VAR_PREFIX} (OIDC Setup Required):**" >> $GITHUB_STEP_SUMMARY
-          echo "1. **Create new S3 bucket**: \`${TF_VAR_PREFIX}-terraform-state-unique1029\` (versioned, encrypted)" >> $GITHUB_STEP_SUMMARY
-          echo "2. **Create temp AWS user**: \`temp-setup-${TF_VAR_PREFIX}-$(date +%Y%m%d)\` with AdministratorAccess" >> $GITHUB_STEP_SUMMARY
-          echo "3. **Update .initial_secrets**: Add new temp user credentials" >> $GITHUB_STEP_SUMMARY
-          echo "4. **Run** \`./prepare_secrets.sh\` and update \`INITIAL_SECRETS_B64\` in GitHub" >> $GITHUB_STEP_SUMMARY
-          echo "5. **Run** \`oidc-first-time-setup.yml\` (will reuse existing provider)" >> $GITHUB_STEP_SUMMARY
-          echo "6. **Run** \`deploy-with-oidc.yml\` to recreate all resources" >> $GITHUB_STEP_SUMMARY
-          echo "7. **Clean up** temp user and \`INITIAL_SECRETS_B64\` after successful deployment" >> $GITHUB_STEP_SUMMARY
+          echo "1. **Create temp AWS user**: \`temp-setup-${TF_VAR_PREFIX}-$(date +%Y%m%d)\` with AdministratorAccess" >> $GITHUB_STEP_SUMMARY
+          echo "2. **Update .initial_secrets**: Add new temp user credentials" >> $GITHUB_STEP_SUMMARY
+          echo "3. **Run** \`./prepare_secrets.sh\` and update \`INITIAL_SECRETS_B64\` in GitHub" >> $GITHUB_STEP_SUMMARY
+          echo "4. **Run** \`oidc-first-time-setup.yml\` (will reuse existing provider)" >> $GITHUB_STEP_SUMMARY
+          echo "5. **Run** \`deploy-with-oidc.yml\` to recreate all resources" >> $GITHUB_STEP_SUMMARY
+          echo "6. **Clean up** temp user and \`INITIAL_SECRETS_B64\` after successful deployment" >> $GITHUB_STEP_SUMMARY
 
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### 💡 What's Preserved:" >> $GITHUB_STEP_SUMMARY
