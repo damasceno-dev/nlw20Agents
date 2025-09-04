@@ -44,6 +44,7 @@ jobs:
     outputs:
       oidc_role_arn: ${{ steps.tf_outputs.outputs.oidc_role_arn }}
       oidc_exists: ${{ steps.check_oidc.outputs.oidc_exists }}
+      cleanup_role_created: ${{ steps.ensure_cleanup.outputs.created }}
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
@@ -219,6 +220,7 @@ jobs:
           AWS_REGION: ${{ env.AWS_REGION }}
           
       - name: Ensure Cleanup Role (org-wide main)
+        id: ensure_cleanup
         env:
           CLEANUP_ROLE_NAME: tf-cleanup-role
           AWS_ACCOUNT_ID: ${{ env.AWS_ACCOUNT_ID }}
@@ -290,6 +292,7 @@ jobs:
           
           if aws iam get-role --role-name "$CLEANUP_ROLE_NAME" >/dev/null 2>&1; then
             echo "✅ Role exists; refreshing trust/policy"
+            echo "created=false" >> $GITHUB_OUTPUT
             aws iam update-assume-role-policy \
               --role-name "$CLEANUP_ROLE_NAME" \
               --policy-document "$TRUST"
@@ -300,6 +303,7 @@ jobs:
               --policy-document "$POLICY"
           else
             echo "🧰 Creating role $CLEANUP_ROLE_NAME"
+            echo "created=true" >> $GITHUB_OUTPUT
             aws iam create-role \
               --role-name "$CLEANUP_ROLE_NAME" \
               --assume-role-policy-document "$TRUST"
@@ -502,3 +506,12 @@ jobs:
           echo "- The S3 bucket for Terraform state is **essential** for proper resource management" >> $GITHUB_STEP_SUMMARY
           echo "- The bucket must exist for the hibernate workflow to properly clean up resources" >> $GITHUB_STEP_SUMMARY
           echo "- Never delete the S3 bucket manually - use the hibernate workflow" >> $GITHUB_STEP_SUMMARY
+          echo "#### 🧹 **Shared Cleanup Infrastructure (For hibernation workflow)**" >> $GITHUB_STEP_SUMMARY
+          if [ "${{ needs.setup_oidc.outputs.cleanup_role_created }}" == "true" ]; then
+            echo "- Cleanup Role: **\`tf-cleanup-role\`** ✨ **CREATED** (new)" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "- Cleanup Role: **\`tf-cleanup-role\`** ✅ **VERIFIED** (already existed)" >> $GITHUB_STEP_SUMMARY
+          fi
+          echo "- Purpose: Enables S3 bucket deletion during hibernation" >> $GITHUB_STEP_SUMMARY
+          echo "- Scope: Organization-wide, shared across all projects" >> $GITHUB_STEP_SUMMARY
+          echo "- Trust: Any repo in **${{ github.repository_owner }}** org on main branch" >> $GITHUB_STEP_SUMMARY
