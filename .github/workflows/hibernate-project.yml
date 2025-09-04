@@ -94,12 +94,20 @@ jobs:
           aws-region: ${{ env.AWS_REGION }}
           role-session-name: GitHubActions-HibernateAppRunner
 
-      - name: Configure Terraform Backend (Local - hibernation mode)
+      - name: Configure Terraform Backend
         working-directory: infra/3-apprunner
         run: |
-          # Use local backend for hibernation (S3 bucket may not exist)
-          printf 'terraform {\n  backend "local" {\n    path = "terraform.tfstate"\n  }\n}\n' > backend.tf
-          echo "✅ Using local backend for hibernation cleanup"
+          # Try S3 backend first to get existing state, fallback to local
+          S3_BUCKET="${TF_VAR_PREFIX}-terraform-state-unique1029"
+          if aws s3api head-bucket --bucket "$S3_BUCKET" 2>/dev/null; then
+            echo "📦 S3 bucket exists - using S3 backend to get existing state"
+            printf 'terraform {\n  backend "s3" {\n    bucket = "%s"\n    key    = "3-apprunner/terraform.tfstate"\n    region = "%s"\n    encrypt = true\n  }\n}\n' "$S3_BUCKET" "$AWS_REGION" > backend.tf
+            echo "✅ Using S3 backend with existing state"
+          else
+            echo "🗄️ S3 bucket deleted - using local backend"
+            printf 'terraform {\n  backend "local" {\n    path = "terraform.tfstate"\n  }\n}\n' > backend.tf
+            echo "✅ Using local backend (no state available)"
+          fi
 
       - name: Terraform Destroy App Runner
         working-directory: infra/3-apprunner
@@ -145,12 +153,20 @@ jobs:
           aws-region: ${{ env.AWS_REGION }}
           role-session-name: GitHubActions-HibernateAmplify
 
-      - name: Configure Terraform Backend (Local - hibernation mode)
+      - name: Configure Terraform Backend
         working-directory: infra/4-amplify
         run: |
-          # Use local backend for hibernation (S3 bucket may not exist)
-          printf 'terraform {\n  backend "local" {\n    path = "terraform.tfstate"\n  }\n}\n' > backend.tf
-          echo "✅ Using local backend for hibernation cleanup"
+          # Try S3 backend first to get existing state, fallback to local
+          S3_BUCKET="${TF_VAR_PREFIX}-terraform-state-unique1029"
+          if aws s3api head-bucket --bucket "$S3_BUCKET" 2>/dev/null; then
+            echo "📦 S3 bucket exists - using S3 backend to get existing state"
+            printf 'terraform {\n  backend "s3" {\n    bucket = "%s"\n    key    = "4-amplify/terraform.tfstate"\n    region = "%s"\n    encrypt = true\n  }\n}\n' "$S3_BUCKET" "$AWS_REGION" > backend.tf
+            echo "✅ Using S3 backend with existing state"
+          else
+            echo "🗄️ S3 bucket deleted - using local backend"
+            printf 'terraform {\n  backend "local" {\n    path = "terraform.tfstate"\n  }\n}\n' > backend.tf
+            echo "✅ Using local backend (no state available)"
+          fi
 
       - name: Terraform Destroy Amplify
         working-directory: infra/4-amplify
@@ -194,12 +210,20 @@ jobs:
           aws-region: ${{ env.AWS_REGION }}
           role-session-name: GitHubActions-HibernateResources
 
-      - name: Configure Terraform Backend (Local - hibernation mode)
+      - name: Configure Terraform Backend
         working-directory: infra/2-resources
         run: |
-          # Use local backend for hibernation (S3 bucket may not exist)
-          printf 'terraform {\n  backend "local" {\n    path = "terraform.tfstate"\n  }\n}\n' > backend.tf
-          echo "✅ Using local backend for hibernation cleanup"
+          # Try S3 backend first to get existing state, fallback to local
+          S3_BUCKET="${TF_VAR_PREFIX}-terraform-state-unique1029"
+          if aws s3api head-bucket --bucket "$S3_BUCKET" 2>/dev/null; then
+            echo "📦 S3 bucket exists - using S3 backend to get existing state"
+            printf 'terraform {\n  backend "s3" {\n    bucket = "%s"\n    key    = "2-resources/terraform.tfstate"\n    region = "%s"\n    encrypt = true\n  }\n}\n' "$S3_BUCKET" "$AWS_REGION" > backend.tf
+            echo "✅ Using S3 backend with existing state"
+          else
+            echo "🗄️ S3 bucket deleted - using local backend"
+            printf 'terraform {\n  backend "local" {\n    path = "terraform.tfstate"\n  }\n}\n' > backend.tf
+            echo "✅ Using local backend (no state available)"
+          fi
 
       - name: Terraform Destroy Resources
         working-directory: infra/2-resources
@@ -251,7 +275,7 @@ jobs:
           S3_BUCKET="${TF_VAR_PREFIX}-terraform-state-unique1029"
           if aws s3api head-bucket --bucket "$S3_BUCKET" 2>/dev/null; then
             echo "📦 S3 bucket exists - using S3 backend to get accurate state"
-            printf 'terraform {\n  backend "s3" {\n    bucket = "%s"\n    key    = "1-oidc/terraform.tfstate"\n    region = "%s"\n    encrypt = true\n  }\n}\n' "$S3_BUCKET" "$AWS_REGION" > backend.tf
+            printf 'terraform {\n  backend "s3" {\n    bucket = "%s"\n    key    = "oidc/terraform.tfstate"\n    region = "%s"\n    encrypt = true\n  }\n}\n' "$S3_BUCKET" "$AWS_REGION" > backend.tf
             terraform init -reconfigure
             echo "✅ Using S3 backend with existing state"
           else
@@ -265,186 +289,353 @@ jobs:
         run: |
           printf 'prefix = "%s"\ngithub_org = "%s"\ngithub_repo = "%s"\naws_region = "%s"\naws_account_id = "%s"\n' "$TF_VAR_PREFIX" "$GITHUB_ORG" "$GITHUB_REPO" "$AWS_REGION" "$AWS_ACCOUNT_ID" > infra/1-oidc/terraform.tfvars
 
-      - name: Delete S3 Terraform State Bucket(s)
-        env:
-          PREFIX: ${{ env.TF_VAR_PREFIX }}
-        run: |
-          set -euo pipefail
-          echo "🗄️ Cleaning up S3 state buckets (while OIDC role still exists)..."
-          echo "Looking for S3 buckets starting with: ${PREFIX}-terraform-state-"
-          BUCKETS=$(aws s3api list-buckets --query "Buckets[?starts_with(Name, \`${PREFIX}-terraform-state-\`)].Name" --output text || true)
-          if [ -z "$BUCKETS" ]; then
-            echo "No matching state buckets found."
-          else
-            for B in $BUCKETS; do
-              echo "Deleting bucket: $B (handling versioning and objects)"
-
-              # Check if bucket exists (might have been deleted by another process)
-              if ! aws s3api head-bucket --bucket "$B" 2>/dev/null; then
-                echo "Bucket $B does not exist, skipping"
-                continue
-              fi
-
-              # Delete all object versions (including delete markers)
-              echo "- Deleting all object versions and delete markers..."
-              aws s3api list-object-versions --bucket "$B" \
-                --query 'Versions[].[Key,VersionId]' --output text | \
-                while read key version; do
-                  if [ -n "$key" ] && [ -n "$version" ]; then
-                    aws s3api delete-object --bucket "$B" --key "$key" --version-id "$version" || true
-                  fi
-                done
-
-              # Delete delete markers
-              aws s3api list-object-versions --bucket "$B" \
-                --query 'DeleteMarkers[].[Key,VersionId]' --output text | \
-                while read key version; do
-                  if [ -n "$key" ] && [ -n "$version" ]; then
-                    aws s3api delete-object --bucket "$B" --key "$key" --version-id "$version" || true
-                  fi
-                done
-
-              # Now delete the empty bucket
-              echo "- Deleting empty bucket..."
-              aws s3api delete-bucket --bucket "$B" || echo "Warning: failed to delete bucket $B"
-            done
-            echo "💤 S3 Terraform state buckets cleaned up"
-          fi
 
       - name: Delete temporary IAM users if exist
         env:
           PREFIX: ${{ env.TF_VAR_PREFIX }}
         run: |
           set -euo pipefail
+
+          # Function to clean up a single IAM user
+          cleanup_iam_user() {
+            local username=$1
+            echo "Cleaning up IAM user: $username"
+
+            # Check if user still exists
+            if ! aws iam get-user --user-name "$username" >/dev/null 2>&1; then
+              echo "ℹ️ User $username no longer exists"
+              return 0
+            fi
+
+            # Delete access keys
+            echo "  - Deleting access keys..."
+            KEYS=$(aws iam list-access-keys --user-name "$username" --query 'AccessKeyMetadata[].AccessKeyId' --output text 2>/dev/null || echo "")
+            for K in $KEYS; do
+              if [ -n "$K" ] && [ "$K" != "None" ]; then
+                echo "    - Deleting access key $K"
+                aws iam delete-access-key --user-name "$username" --access-key-id "$K" || true
+              fi
+            done
+
+            # Detach managed policies
+            echo "  - Detaching managed policies..."
+            POLS=$(aws iam list-attached-user-policies --user-name "$username" --query 'AttachedPolicies[].PolicyArn' --output text 2>/dev/null || echo "")
+            for P in $POLS; do
+              if [ -n "$P" ] && [ "$P" != "None" ]; then
+                echo "    - Detaching policy $P"
+                aws iam detach-user-policy --user-name "$username" --policy-arn "$P" || true
+              fi
+            done
+
+            # Remove inline policies
+            echo "  - Deleting inline policies..."
+            INLINES=$(aws iam list-user-policies --user-name "$username" --query 'PolicyNames[]' --output text 2>/dev/null || echo "")
+            for IP in $INLINES; do
+              if [ -n "$IP" ] && [ "$IP" != "None" ]; then
+                echo "    - Deleting inline policy $IP"
+                aws iam delete-user-policy --user-name "$username" --policy-name "$IP" || true
+              fi
+            done
+
+            # Remove from groups
+            echo "  - Removing from groups..."
+            GROUPS=$(aws iam list-groups-for-user --user-name "$username" --query 'Groups[].GroupName' --output text 2>/dev/null || echo "")
+            for G in $GROUPS; do
+              if [ -n "$G" ] && [ "$G" != "None" ]; then
+                echo "    - Removing from group $G"
+                aws iam remove-user-from-group --user-name "$username" --group-name "$G" || true
+              fi
+            done
+
+            # Delete login profile if exists
+            echo "  - Deleting login profile (if any)..."
+            aws iam delete-login-profile --user-name "$username" || true
+
+            # Finally delete the user
+            echo "  - Deleting user $username"
+            if aws iam delete-user --user-name "$username" 2>/dev/null; then
+              echo "✅ Successfully deleted user $username"
+              return 0
+            else
+              echo "⚠️ Failed to delete user $username (may be in use)"
+              return 1
+            fi
+          }
+
           echo "Looking for IAM users starting with: temp-setup-${PREFIX}-"
 
-          # Try to list users, but handle AccessDenied gracefully
-          if USERS=$(aws iam list-users --query "Users[?starts_with(UserName, \`temp-setup-${PREFIX}-\`)].UserName" --output text 2>/dev/null); then
-            echo "✅ Successfully listed IAM users"
+          # First check if we have ListUsers permission
+          if aws iam list-users --max-items 1 >/dev/null 2>&1; then
+            echo "✅ Have ListUsers permission - proceeding with comprehensive cleanup"
+
+            # We have permission, proceed with cleanup
+            USERS=$(aws iam list-users --query "Users[?starts_with(UserName, \`temp-setup-${PREFIX}-\`)].UserName" --output text || echo "")
             if [ -z "$USERS" ] || [ "$USERS" = "None" ]; then
-              echo "No matching temp setup users found."
+              echo "✅ No matching temp setup users found."
             else
-            for U in $USERS; do
-              echo "Cleaning up IAM user: $U"
-              # Delete access keys
-              KEYS=$(aws iam list-access-keys --user-name "$U" --query 'AccessKeyMetadata[].AccessKeyId' --output text || true)
-              for K in $KEYS; do
-                echo "- Deleting access key $K"
-                aws iam delete-access-key --user-name "$U" --access-key-id "$K" || true
+              FAILED_USERS=""
+              for U in $USERS; do
+                if ! cleanup_iam_user "$U"; then
+                  FAILED_USERS="$FAILED_USERS $U"
+                fi
               done
-              # Detach managed policies
-              POLS=$(aws iam list-attached-user-policies --user-name "$U" --query 'AttachedPolicies[].PolicyArn' --output text || true)
-              for P in $POLS; do
-                echo "- Detaching policy $P"
-                aws iam detach-user-policy --user-name "$U" --policy-arn "$P" || true
-              done
-              # Remove inline policies
-              INLINES=$(aws iam list-user-policies --user-name "$U" --query 'PolicyNames[]' --output text || true)
-              for IP in $INLINES; do
-                echo "- Deleting inline policy $IP"
-                aws iam delete-user-policy --user-name "$U" --policy-name "$IP" || true
-              done
-              # Remove from groups
-              GROUPS=$(aws iam list-groups-for-user --user-name "$U" --query 'Groups[].GroupName' --output text || true)
-              for G in $GROUPS; do
-                echo "- Removing from group $G"
-                aws iam remove-user-from-group --user-name "$U" --group-name "$G" || true
-              done
-              # Delete login profile if exists
-              echo "- Deleting login profile (if any)"
-              aws iam delete-login-profile --user-name "$U" || true
-              # Finally delete the user
-              echo "- Deleting user $U"
-              aws iam delete-user --user-name "$U" || true
-            done
-            echo "💤 Temporary IAM users cleaned up"
+
+              if [ -n "$FAILED_USERS" ]; then
+                echo "⚠️ Some users failed to delete: $FAILED_USERS"
+              else
+                echo "✅ All temporary IAM users cleaned up successfully"
+              fi
+            fi
+
           else
             echo "⚠️  Cannot list IAM users due to permission restrictions"
-            echo "   This may happen if the role was created before iam:ListUsers was added to the policy"
-            echo "   Manual cleanup may be required:"
-            echo "   1. For temp users:"
-            echo "      aws iam list-users --query 'Users[?starts_with(UserName, \`temp-setup-${PREFIX}-\`)].UserName'"
-            echo "      aws iam delete-user --user-name <username>"
-            echo "   2. For orphaned OIDC policies:"
-            echo "      aws iam list-policies --query 'Policies[?PolicyName && contains(PolicyName, \`-${PREFIX}-OIDC-\`)].Arn'"
-            echo "      aws iam delete-policy --policy-arn <policy-arn>"
+            echo "   Falling back to targeted cleanup based on known patterns"
+
+            # Try direct deletion if we know the pattern
+            # Check last 30 days for potential temp users
+            FAILED_USERS=""
+            SUCCESS_COUNT=0
+
+            for i in {0..30}; do
+              # Calculate date for potential temp user
+              USER_DATE=$(date -d "$i days ago" +%Y%m%d 2>/dev/null || date -j -v-${i}d +%Y%m%d 2>/dev/null)
+              POTENTIAL_USER="temp-setup-${PREFIX}-${USER_DATE}"
+
+              if cleanup_iam_user "$POTENTIAL_USER"; then
+                SUCCESS_COUNT=$((SUCCESS_COUNT + 1))
+              fi
+            done
+
+            if [ $SUCCESS_COUNT -gt 0 ]; then
+              echo "✅ Cleaned up $SUCCESS_COUNT temporary IAM users using pattern-based approach"
+            else
+              echo "ℹ️ No temporary users found using pattern-based approach"
+            fi
+
+            echo ""
+            echo "📋 Manual verification recommended:"
+            echo "   aws iam list-users --query 'Users[?starts_with(UserName, \`temp-setup-${PREFIX}-\`)].UserName'"
+            echo "   aws iam delete-user --user-name <username> (if any found)"
           fi
+
 
       - name: OIDC Cleanup
         working-directory: infra/1-oidc
         run: |
           echo "🗑️ Destroying project-specific OIDC role (preserving shared OIDC provider)..."
+          echo "🔧 Using terraform destroy with S3 backend (reliable IAM dependency handling)"
+          terraform destroy -auto-approve -var-file=terraform.tfvars
+          echo "✅ OIDC role and all associated policies destroyed successfully via terraform"
 
-          # Project-specific role name (created by oidc-first-time-setup)
-          # This uses TF_VAR_PREFIX to ensure we only destroy THIS project's role
-          ROLE_NAME="${TF_VAR_PREFIX}-github-deploy-role"
-          echo "Target role: $ROLE_NAME (project-specific, created by oidc-first-time-setup)"
+  # Step 3: Final cleanup - delete S3 bucket as the last step
+  cleanup_s3_bucket:
+    name: "🗄️ Final Cleanup - S3 Bucket"
+    runs-on: ubuntu-latest
+    needs: [validate_confirmation, cleanup_oidc]
+    if: ${{ needs.validate_confirmation.outputs.confirmed == 'true' && needs.validate_confirmation.outputs.oidc_role_arn != '' }}
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
 
-          # Check if we're using S3 backend (state should exist)
-          if grep -q 'backend "s3"' backend.tf 2>/dev/null; then
-            echo "📦 Using S3 backend - attempting terraform destroy..."
-            echo "   This will automatically clean up the role AND all associated policies"
+      - name: Create .secrets file
+        run: |
+          echo "${{ secrets.SECRETS_B64 }}" | base64 -d > .secrets
+          chmod 600 .secrets
 
-            # Try normal terraform destroy first (cleanest approach)
-            if terraform destroy -auto-approve -var-file=terraform.tfvars; then
-              echo "🔐 OIDC role and all policies destroyed successfully via terraform"
-            else
-              echo "⚠️  Terraform destroy failed - this is expected if state is incomplete"
-              echo "   Falling back to direct AWS CLI cleanup for the specific project role..."
-            fi
+      - name: Load Environment Variables
+        run: |
+          export $(grep -v '^#' .secrets | grep -v '^$' | xargs)
+          echo "AWS_REGION=${AWS_REGION}" >> $GITHUB_ENV
+          echo "TF_VAR_PREFIX=${TF_VAR_PREFIX}" >> $GITHUB_ENV
 
-          else
-            echo "🗄️ Using local backend - using direct AWS CLI cleanup..."
-            echo "   This ensures we only destroy the specific role AND its policies created by oidc-first-time-setup"
+      - name: Configure AWS Credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ needs.validate_confirmation.outputs.oidc_role_arn }}
+          aws-region: ${{ env.AWS_REGION }}
+          role-session-name: GitHubActions-FinalCleanup
 
-            # Check if the role exists before attempting cleanup
-            if aws iam get-role --role-name "$ROLE_NAME" >/dev/null 2>&1; then
-              echo "✅ Found role $ROLE_NAME - proceeding with cleanup"
+      - name: Final S3 Bucket Cleanup
+        env:
+          PREFIX: ${{ env.TF_VAR_PREFIX }}
+        run: |
+          set -euo pipefail
 
-              # Detach all attached managed policies
-              echo "   Detaching managed policies..."
-              POLICIES=$(aws iam list-attached-role-policies --role-name "$ROLE_NAME" --query 'AttachedPolicies[].PolicyArn' --output text 2>/dev/null || echo "")
-              for POLICY in $POLICIES; do
-                if [ -n "$POLICY" ] && [ "$POLICY" != "None" ]; then
-                  echo "   Detaching: $POLICY"
-                  aws iam detach-role-policy --role-name "$ROLE_NAME" --policy-arn "$POLICY" || echo "   Failed to detach $POLICY"
+          # Enhanced S3 bucket deletion with retry logic
+          delete_bucket_with_retry() {
+            local bucket=$1
+            local max_attempts=3
+            local attempt=1
 
-                  # Also delete the policy if it's one of our OIDC policies (contains the prefix)
-                  POLICY_NAME=$(echo "$POLICY" | awk -F'/' '{print $NF}')
-                  if [[ "$POLICY_NAME" == *"${PREFIX}-OIDC"* ]]; then
-                    echo "   Deleting OIDC policy: $POLICY_NAME"
-                    aws iam delete-policy --policy-arn "$POLICY" || echo "   Failed to delete policy $POLICY_NAME"
+            while [ $attempt -le $max_attempts ]; do
+              echo "Attempt $attempt of $max_attempts to delete bucket $bucket"
+
+              # Check if bucket still exists
+              if ! aws s3api head-bucket --bucket "$bucket" 2>/dev/null; then
+                echo "ℹ️ Bucket $bucket does not exist, skipping"
+                return 0
+              fi
+
+              # Empty the bucket first - handle versioning
+              echo "  - Deleting all object versions and delete markers..."
+
+              # Delete all object versions
+              aws s3api list-object-versions --bucket "$bucket" \
+                --query 'Versions[].[Key,VersionId]' --output text 2>/dev/null | \
+                while read key version; do
+                  if [ -n "$key" ] && [ -n "$version" ]; then
+                    aws s3api delete-object --bucket "$bucket" --key "$key" --version-id "$version" || true
                   fi
-                fi
-              done
+                done
 
-              # Remove inline policies
-              echo "   Removing inline policies..."
-              INLINE_POLICIES=$(aws iam list-role-policies --role-name "$ROLE_NAME" --query 'PolicyNames[]' --output text 2>/dev/null || echo "")
-              for POLICY_NAME in $INLINE_POLICIES; do
-                if [ -n "$POLICY_NAME" ] && [ "$POLICY_NAME" != "None" ]; then
-                  echo "   Deleting inline policy: $POLICY_NAME"
-                  aws iam delete-role-policy --role-name "$ROLE_NAME" --policy-name "$POLICY_NAME" || echo "   Failed to delete $POLICY_NAME"
-                fi
-              done
+              # Delete delete markers
+              aws s3api list-object-versions --bucket "$bucket" \
+                --query 'DeleteMarkers[].[Key,VersionId]' --output text 2>/dev/null | \
+                while read key version; do
+                  if [ -n "$key" ] && [ -n "$version" ]; then
+                    aws s3api delete-object --bucket "$bucket" --key "$key" --version-id "$version" || true
+                  fi
+                done
 
-              # Finally delete the role
-              echo "   Deleting role: $ROLE_NAME"
-              aws iam delete-role --role-name "$ROLE_NAME" && echo "✅ Role $ROLE_NAME deleted successfully"
+              # Try to delete the now-empty bucket
+              if aws s3api delete-bucket --bucket "$bucket" 2>/dev/null; then
+                echo "✅ Successfully deleted bucket $bucket"
+                return 0
+              fi
 
+              if [ $attempt -lt $max_attempts ]; then
+                echo "⏳ Waiting 10 seconds before retry..."
+                sleep 10
+              fi
+
+              attempt=$((attempt + 1))
+            done
+
+            echo "⚠️ Failed to delete bucket $bucket after $max_attempts attempts"
+            return 1
+          }
+
+          echo "🗄️ Final cleanup: Deleting S3 terraform state bucket..."
+          echo "Looking for S3 buckets starting with: ${PREFIX}-terraform-state-"
+
+          BUCKETS=$(aws s3api list-buckets --query "Buckets[?starts_with(Name, \`${PREFIX}-terraform-state-\`)].Name" --output text || true)
+
+          if [ -z "$BUCKETS" ]; then
+            echo "✅ No terraform state buckets found - cleanup complete!"
+          else
+            FAILED_BUCKETS=""
+            for B in $BUCKETS; do
+              echo "🗑️ Deleting final S3 bucket: $B"
+              if ! delete_bucket_with_retry "$B"; then
+                FAILED_BUCKETS="$FAILED_BUCKETS $B"
+              fi
+            done
+
+            if [ -n "$FAILED_BUCKETS" ]; then
+              echo "⚠️ Some buckets failed to delete: $FAILED_BUCKETS"
+              echo "Manual cleanup may be required for these buckets"
+              exit 1
             else
-              echo "ℹ️  Role $ROLE_NAME does not exist - nothing to clean up"
+              echo "✅ All S3 terraform state buckets cleaned up successfully"
             fi
-
-            echo "🔐 Project-specific OIDC role cleanup completed"
           fi
 
+  # Step 4: Validate complete cleanup (low priority, runs always)
+  validate_cleanup:
+    name: "🔍 Validate Complete Cleanup"
+    runs-on: ubuntu-latest
+    needs: [validate_confirmation, cleanup_s3_bucket]
+    if: always()
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
 
+      - name: Create .secrets file
+        run: |
+          echo "${{ secrets.SECRETS_B64 }}" | base64 -d > .secrets
+          chmod 600 .secrets
+
+      - name: Load Environment Variables
+        run: |
+          export $(grep -v '^#' .secrets | grep -v '^$' | xargs)
+          echo "AWS_REGION=${AWS_REGION}" >> $GITHUB_ENV
+          echo "TF_VAR_PREFIX=${TF_VAR_PREFIX}" >> $GITHUB_ENV
+
+      - name: Configure AWS Credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ needs.validate_confirmation.outputs.oidc_role_arn }}
+          aws-region: ${{ env.AWS_REGION }}
+          role-session-name: GitHubActions-ValidateCleanup
+
+      - name: Check for Orphaned Resources
+        env:
+          PREFIX: ${{ env.TF_VAR_PREFIX }}
+        run: |
+          set -euo pipefail
+
+          echo "## 🔍 Checking for orphaned resources..." >> $GITHUB_STEP_SUMMARY
+          ORPHANED_FOUND=false
+
+          # Check for remaining S3 buckets
+          echo "🔍 Checking for orphaned S3 buckets..."
+          BUCKETS=$(aws s3api list-buckets --query "Buckets[?contains(Name, '${PREFIX}')].Name" --output text 2>/dev/null || echo "")
+          if [ -n "$BUCKETS" ] && [ "$BUCKETS" != "None" ]; then
+            echo "⚠️ Found orphaned S3 buckets: $BUCKETS" >> $GITHUB_STEP_SUMMARY
+            echo "   These may need manual cleanup" >> $GITHUB_STEP_SUMMARY
+            ORPHANED_FOUND=true
+          else
+            echo "✅ No orphaned S3 buckets found" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          # Check for remaining IAM roles
+          echo "🔍 Checking for orphaned IAM roles..."
+          ROLES=$(aws iam list-roles --query "Roles[?contains(RoleName, '${PREFIX}')].RoleName" --output text 2>/dev/null || echo "")
+          if [ -n "$ROLES" ] && [ "$ROLES" != "None" ]; then
+            echo "⚠️ Found orphaned IAM roles: $ROLES" >> $GITHUB_STEP_SUMMARY
+            echo "   These may need manual cleanup" >> $GITHUB_STEP_SUMMARY
+            ORPHANED_FOUND=true
+          else
+            echo "✅ No orphaned IAM roles found" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          # Check for orphaned IAM policies
+          echo "🔍 Checking for orphaned IAM policies..."
+          POLICIES=$(aws iam list-policies --query "Policies[?contains(PolicyName, '${PREFIX}-OIDC-')].Arn" --output text 2>/dev/null || echo "")
+          if [ -n "$POLICIES" ] && [ "$POLICIES" != "None" ]; then
+            echo "⚠️ Found orphaned IAM policies: $POLICIES" >> $GITHUB_STEP_SUMMARY
+            echo "   These may need manual cleanup" >> $GITHUB_STEP_SUMMARY
+            ORPHANED_FOUND=true
+          else
+            echo "✅ No orphaned IAM policies found" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          # Check for CloudWatch resources
+          echo "🔍 Checking for orphaned CloudWatch resources..."
+          LOG_GROUPS=$(aws logs describe-log-groups --query "logGroups[?contains(logGroupName, '${PREFIX}')].logGroupName" --output text 2>/dev/null || echo "")
+          if [ -n "$LOG_GROUPS" ] && [ "$LOG_GROUPS" != "None" ]; then
+            echo "⚠️ Found orphaned CloudWatch log groups: $LOG_GROUPS" >> $GITHUB_STEP_SUMMARY
+            echo "   These may need manual cleanup" >> $GITHUB_STEP_SUMMARY
+            ORPHANED_FOUND=true
+          else
+            echo "✅ No orphaned CloudWatch log groups found" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          if [ "$ORPHANED_FOUND" = true ]; then
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "### 🧹 Manual Cleanup Required" >> $GITHUB_STEP_SUMMARY
+            echo "Some resources could not be automatically cleaned up." >> $GITHUB_STEP_SUMMARY
+            echo "Please review the warnings above and clean up manually if needed." >> $GITHUB_STEP_SUMMARY
+          else
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "### ✅ Complete Cleanup Verified" >> $GITHUB_STEP_SUMMARY
+            echo "No orphaned resources found - hibernation was successful!" >> $GITHUB_STEP_SUMMARY
+          fi
 
   hibernation_summary:
     name: "😴 Hibernation Summary"
     runs-on: ubuntu-latest
-    needs: [validate_confirmation, hibernate_resources, cleanup_oidc]
+    needs: [validate_confirmation, hibernate_resources, cleanup_oidc, cleanup_s3_bucket, validate_cleanup]
     if: always() && needs.validate_confirmation.outputs.confirmed == 'true'
     steps:
       - name: Checkout Repository
@@ -463,7 +654,7 @@ jobs:
       - name: Generate Hibernation Summary
         run: |
           # Check if hibernation completed successfully
-          if [[ "${{ needs.hibernate_resources.result }}" == "success" && "${{ needs.cleanup_oidc.result }}" == "success" ]]; then
+          if [[ "${{ needs.hibernate_resources.result }}" == "success" && "${{ needs.cleanup_oidc.result }}" == "success" && "${{ needs.cleanup_s3_bucket.result }}" == "success" ]]; then
             echo "## 😴 Project Successfully Hibernated!" >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
             echo "Project **${TF_VAR_PREFIX}** is now in cost-optimized hibernation mode." >> $GITHUB_STEP_SUMMARY
@@ -487,6 +678,7 @@ jobs:
             echo "### Status:" >> $GITHUB_STEP_SUMMARY
             echo "- Hibernate Resources: ${{ needs.hibernate_resources.result }}" >> $GITHUB_STEP_SUMMARY
             echo "- OIDC Cleanup: ${{ needs.cleanup_oidc.result }}" >> $GITHUB_STEP_SUMMARY
+            echo "- S3 Bucket Cleanup: ${{ needs.cleanup_s3_bucket.result }}" >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
             echo "### ⚠️ Manual Cleanup May Be Required" >> $GITHUB_STEP_SUMMARY
             echo "Check AWS Console for remaining resources with prefix **${TF_VAR_PREFIX}** and clean up manually if needed." >> $GITHUB_STEP_SUMMARY
