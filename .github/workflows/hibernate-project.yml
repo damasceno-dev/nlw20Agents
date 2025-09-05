@@ -429,8 +429,8 @@ jobs:
 
   # Final cleanup - delete S3 bucket as the last step
   # uses tf-cleanup-role created in 1-oidc-first-time-setup.yml or reused from other projects
-  cleanup_s3_bucket:
-    name: "🗄️ Final Cleanup - S3 Bucket"
+  delete_s3_state_bucket:
+    name: "🗄️ Delete S3 State Bucket"
     runs-on: ubuntu-latest
     needs: [validate_confirmation, cleanup_oidc]
     if: ${{ needs.validate_confirmation.outputs.confirmed == 'true' && needs.validate_confirmation.outputs.oidc_role_arn != '' }}
@@ -523,12 +523,17 @@ jobs:
           BUCKETS=$(aws s3api list-buckets --query "Buckets[?starts_with(Name, \`${PREFIX}-terraform-state-\`)].Name" --output text || true)
 
           if [ -z "$BUCKETS" ]; then
-            echo "✅ No terraform state buckets found - cleanup complete!"
+            echo "❌ No terraform state buckets found to delete - this should not happen!"
+            echo "Expected to find buckets with prefix: ${PREFIX}-terraform-state-"
+            exit 1
           else
             FAILED_BUCKETS=""
+            DELETED_COUNT=0
             for B in $BUCKETS; do
               echo "🗑️ Deleting final S3 bucket: $B"
-              if ! delete_bucket_with_retry "$B"; then
+              if delete_bucket_with_retry "$B"; then
+                DELETED_COUNT=$((DELETED_COUNT + 1))
+              else
                 FAILED_BUCKETS="$FAILED_BUCKETS $B"
               fi
             done
@@ -537,8 +542,11 @@ jobs:
               echo "⚠️ Some buckets failed to delete: $FAILED_BUCKETS"
               echo "Manual cleanup may be required for these buckets"
               exit 1
+            elif [ $DELETED_COUNT -eq 0 ]; then
+              echo "❌ No buckets were successfully deleted!"
+              exit 1
             else
-              echo "✅ All S3 terraform state buckets cleaned up successfully"
+              echo "✅ Successfully deleted $DELETED_COUNT S3 terraform state bucket(s)"
             fi
           fi
 
@@ -546,7 +554,7 @@ jobs:
   validate_cleanup:
     name: "🔍 Validate Complete Cleanup"
     runs-on: ubuntu-latest
-    needs: [validate_confirmation, cleanup_s3_bucket]
+    needs: [validate_confirmation, delete_s3_state_bucket]
     if: always()
     steps:
       - name: Checkout Repository
@@ -639,7 +647,7 @@ jobs:
   hibernation_summary:
     name: "😴 Hibernation Summary"
     runs-on: ubuntu-latest
-    needs: [validate_confirmation, hibernate_resources, cleanup_oidc, cleanup_s3_bucket, validate_cleanup]
+    needs: [validate_confirmation, hibernate_resources, cleanup_oidc, delete_s3_state_bucket, validate_cleanup]
     if: always() && needs.validate_confirmation.outputs.confirmed == 'true'
     steps:
       - name: Checkout Repository
@@ -658,7 +666,7 @@ jobs:
       - name: Generate Hibernation Summary
         run: |
           # Check if hibernation completed successfully
-          if [[ "${{ needs.hibernate_resources.result }}" == "success" && "${{ needs.cleanup_oidc.result }}" == "success" && "${{ needs.cleanup_s3_bucket.result }}" == "success" ]]; then
+          if [[ "${{ needs.hibernate_resources.result }}" == "success" && "${{ needs.cleanup_oidc.result }}" == "success" && "${{ needs.delete_s3_state_bucket.result }}" == "success" ]]; then
             echo "## 😴 Project Successfully Hibernated!" >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
             echo "Project **${TF_VAR_PREFIX}** is now in cost-optimized hibernation mode." >> $GITHUB_STEP_SUMMARY
@@ -682,7 +690,7 @@ jobs:
             echo "### Status:" >> $GITHUB_STEP_SUMMARY
             echo "- Hibernate Resources: ${{ needs.hibernate_resources.result }}" >> $GITHUB_STEP_SUMMARY
             echo "- OIDC Cleanup: ${{ needs.cleanup_oidc.result }}" >> $GITHUB_STEP_SUMMARY
-            echo "- S3 Bucket Cleanup: ${{ needs.cleanup_s3_bucket.result }}" >> $GITHUB_STEP_SUMMARY
+            echo "- S3 Bucket Cleanup: ${{ needs.delete_s3_state_bucket.result }}" >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
             echo "### ⚠️ Manual Cleanup May Be Required" >> $GITHUB_STEP_SUMMARY
             echo "Check AWS Console for remaining resources with prefix **${TF_VAR_PREFIX}** and clean up manually if needed." >> $GITHUB_STEP_SUMMARY
